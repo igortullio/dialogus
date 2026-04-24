@@ -6,6 +6,7 @@
     "dev": "pnpm --parallel -r dev",
     "build": "pnpm -r build",
     "test": "vitest run && pnpm -r test",
+    "test:integration": "vitest run --config ./vitest.integration.config.ts",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "pnpm -r typecheck",
@@ -20,6 +21,7 @@
   },
   "packageManager": "pnpm@9.15.4",
   "devDependencies": {
+    "@biomejs/biome": "^2.4.8",
     "vitest": "^4.0.0",
     "yaml": "^2.6.1"
   }

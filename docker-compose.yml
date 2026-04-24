@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dialogus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dialogus}
+      POSTGRES_DB: ${POSTGRES_DB:-dialogus}
+    volumes:
+      - dialogus-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U dialogus']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dialogus-postgres-data:

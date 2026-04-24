@@ -20,6 +20,10 @@ pnpm dev
 
 Open <http://localhost:3000> — the page should render `dIAlogus — api: up / db: up / pgboss: up` once the stack is wired end-to-end.
 
+### Postgres 18 / Apple Silicon fallback
+
+`docker-compose.yml` pins `pgvector/pgvector:pg18`. If the Postgres 18 image misbehaves on your machine — most likely on Apple Silicon while the multi-arch tag stabilises — fall back to Postgres 17 by editing the `image:` line to `pgvector/pgvector:pg17`, then `docker compose down -v && docker compose up -d`. Both tags ship pgvector ≥ 0.8.0, so migrations and the embedding pipeline behave identically.
+
 ## Architecture
 
 _Filled in by task_20 once the end-to-end Foundation slice is wired._

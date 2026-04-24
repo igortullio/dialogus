@@ -1,0 +1,26 @@
+{
+  "name": "dialogus",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel -r dev",
+    "build": "pnpm -r build",
+    "test": "vitest run && pnpm -r test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @dialogus/db db:generate",
+    "db:migrate": "pnpm --filter @dialogus/db db:migrate",
+    "db:studio": "pnpm --filter @dialogus/db db:studio",
+    "db:reset": "pnpm --filter @dialogus/db db:reset",
+    "prepare": "git config core.hooksPath .githooks || true"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "devDependencies": {
+    "vitest": "^4.0.0",
+    "yaml": "^2.6.1"
+  }
+}

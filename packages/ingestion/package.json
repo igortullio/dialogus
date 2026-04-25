@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3",
     "@dialogus/db": "workspace:*",
     "@dialogus/shared": "workspace:*",
     "bottleneck": "^2.19.5",

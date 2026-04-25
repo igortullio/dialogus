@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Rate limit reached for default-text-embedding-3-small in organization on requests per min (RPM).",
+    "type": "tokens",
+    "param": null,
+    "code": "rate_limit_exceeded"
+  }
+}

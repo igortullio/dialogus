@@ -33,7 +33,6 @@ describe('@dialogus/ingestion package.json', () => {
     const deps = (pkg.dependencies ?? {}) as Record<string, string>
     expect('@gxl/epub-parser' in deps).toBe(false)
     expect('epub2' in deps).toBe(false)
-    expect('@ai-sdk/openai' in deps).toBe(false)
   })
 
   it('exposes typecheck + test scripts', () => {

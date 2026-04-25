@@ -1,35 +1,22 @@
 import { pathToFileURL } from 'node:url'
-import { createDatabase, type Database } from '@dialogus/db'
+import { createDatabase, createPgBoss, type Database, type PgBoss } from '@dialogus/db'
 import { type DialogusEnv, loadConfig, loadEnvFromRoot } from '@dialogus/shared/config'
-import { type ServerType, serve } from '@hono/node-server'
-import { Hono } from 'hono'
 import { type Logger, pino, stdSerializers } from 'pino'
 import {
-  createProblemMiddleware,
-  type ProblemVariables,
-} from './infrastructure/http/middleware/problem'
-import { type RequestIdVariables, requestId } from './infrastructure/http/middleware/request-id'
-import { createHealthRoute } from './infrastructure/http/routes/health'
+  CLEANUP_IDEMPOTENCY_KEYS_CRON,
+  CLEANUP_IDEMPOTENCY_KEYS_JOB,
+  createCleanupIdempotencyKeysHandler,
+} from './handlers/catalog-cleanup-idempotency-keys'
 
 const SHUTDOWN_TIMEOUT_MS = 10_000
 
-export type BootVariables = RequestIdVariables & ProblemVariables
-
-export interface RouteMount {
-  prefix: string
-  app: Hono
-}
-
 export interface StartOptions {
   logger?: Logger
-  routes?: ReadonlyArray<RouteMount>
 }
 
 export interface BootResult {
-  app: Hono<{ Variables: BootVariables }>
   db: Database
-  server: ServerType
-  port: number
+  boss: PgBoss
   logger: Logger
   config: DialogusEnv
   shutdown: () => Promise<void>
@@ -45,43 +32,47 @@ export function redactDatabaseUrl(value: string): string {
   }
 }
 
-export function createApiLogger(level: string): Logger {
+export function createWorkerLogger(level: string): Logger {
   return pino({
     level,
-    name: '@dialogus/api',
+    name: '@dialogus/worker',
     serializers: { error: stdSerializers.err },
   })
 }
 
+async function ensureQueue(boss: PgBoss, name: string): Promise<void> {
+  const existing = await boss.getQueue(name)
+  if (existing == null) {
+    await boss.createQueue(name)
+  }
+}
+
+async function registerCleanupIdempotencyKeys(
+  boss: PgBoss,
+  db: Database,
+  logger: Logger,
+): Promise<void> {
+  await ensureQueue(boss, CLEANUP_IDEMPOTENCY_KEYS_JOB)
+  await boss.schedule(CLEANUP_IDEMPOTENCY_KEYS_JOB, CLEANUP_IDEMPOTENCY_KEYS_CRON, {})
+  await boss.work(CLEANUP_IDEMPOTENCY_KEYS_JOB, createCleanupIdempotencyKeysHandler({ db, logger }))
+}
+
 export async function start(options: StartOptions = {}): Promise<BootResult> {
   const config = loadConfig()
-  const logger = options.logger ?? createApiLogger(config.LOG_LEVEL)
+  const logger = options.logger ?? createWorkerLogger(config.LOG_LEVEL)
   const db = createDatabase(config.DATABASE_URL)
+  const boss = createPgBoss(config.DATABASE_URL)
 
-  const app = new Hono<{ Variables: BootVariables }>()
-  app.use('*', requestId())
-  app.use('*', createProblemMiddleware({ logger }))
-  app.route('/health', createHealthRoute({ db }))
-  for (const mount of options.routes ?? []) {
-    app.route(mount.prefix, mount.app)
-  }
+  await boss.start()
+  await registerCleanupIdempotencyKeys(boss, db, logger)
 
-  let resolveListening!: (port: number) => void
-  const listening = new Promise<number>((res) => {
-    resolveListening = res
-  })
-  const server = serve({ fetch: app.fetch, port: config.API_PORT }, (info) => {
-    logger.info(
-      {
-        NODE_ENV: config.NODE_ENV,
-        API_PORT: info.port,
-        DATABASE_URL: redactDatabaseUrl(config.DATABASE_URL),
-      },
-      `api listening on :${info.port}`,
-    )
-    resolveListening(info.port)
-  })
-  const port = await listening
+  logger.info(
+    {
+      NODE_ENV: config.NODE_ENV,
+      DATABASE_URL: redactDatabaseUrl(config.DATABASE_URL),
+    },
+    'worker started',
+  )
 
   let shuttingDown: Promise<void> | undefined
   const shutdown = (): Promise<void> => {
@@ -91,7 +82,11 @@ export async function start(options: StartOptions = {}): Promise<BootResult> {
         logger.error({ timeoutMs: SHUTDOWN_TIMEOUT_MS }, 'shutdown timed out, forcing exit')
       }, SHUTDOWN_TIMEOUT_MS).unref()
       try {
-        await new Promise<void>((res) => server.close(() => res()))
+        try {
+          await boss.stop({ graceful: false })
+        } catch (error) {
+          logger.error({ error }, 'failed to stop pg-boss')
+        }
         const client = (
           db as unknown as { $client?: { end: (opts?: { timeout?: number }) => Promise<void> } }
         ).$client
@@ -109,7 +104,7 @@ export async function start(options: StartOptions = {}): Promise<BootResult> {
     return shuttingDown
   }
 
-  return { app, db, server, port, logger, config, shutdown }
+  return { db, boss, logger, config, shutdown }
 }
 
 export function attachSignalHandlers(
@@ -117,7 +112,7 @@ export function attachSignalHandlers(
   onExit: (code: number) => void = (code) => process.exit(code),
 ): () => void {
   const handle = (signal: NodeJS.Signals): void => {
-    boot.logger.info({ signal }, `${signal} received, closing server`)
+    boot.logger.info({ signal }, `${signal} received, stopping worker`)
     boot.shutdown().then(
       () => onExit(0),
       (error: unknown) => {
@@ -142,7 +137,7 @@ export async function main(): Promise<void> {
     const boot = await start()
     attachSignalHandlers(boot)
   } catch (error) {
-    const logger = createApiLogger('error')
+    const logger = createWorkerLogger('error')
     logger.error({ error }, 'startup failed')
     process.exit(1)
   }

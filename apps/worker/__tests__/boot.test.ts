@@ -1,11 +1,16 @@
 import type { Database } from '@dialogus/db'
-import { Hono } from 'hono'
 import { pino } from 'pino'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const probeDbMock = vi.hoisted(() => vi.fn())
-const probePgBossMock = vi.hoisted(() => vi.fn())
 const dbClientEndMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
+
+const bossStartMock = vi.hoisted(() => vi.fn())
+const bossStopMock = vi.hoisted(() => vi.fn())
+const bossGetQueueMock = vi.hoisted(() => vi.fn())
+const bossCreateQueueMock = vi.hoisted(() => vi.fn())
+const bossScheduleMock = vi.hoisted(() => vi.fn())
+const bossWorkMock = vi.hoisted(() => vi.fn())
+const createPgBossMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@dialogus/db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@dialogus/db')>()
@@ -17,8 +22,7 @@ vi.mock('@dialogus/db', async (importOriginal) => {
           $client: { end: dbClientEndMock },
         }) as unknown as Database,
     ),
-    probeDb: probeDbMock,
-    probePgBoss: probePgBossMock,
+    createPgBoss: createPgBossMock,
   }
 })
 
@@ -59,41 +63,85 @@ function captureLogs(): CapturedLogs {
 
 beforeEach(() => {
   vi.resetModules()
-  probeDbMock.mockReset().mockResolvedValue(true)
-  probePgBossMock.mockReset().mockResolvedValue(true)
   dbClientEndMock.mockClear()
+  bossStartMock.mockReset().mockResolvedValue({})
+  bossStopMock.mockReset().mockResolvedValue(undefined)
+  bossGetQueueMock.mockReset().mockResolvedValue(null)
+  bossCreateQueueMock.mockReset().mockResolvedValue(undefined)
+  bossScheduleMock.mockReset().mockResolvedValue(undefined)
+  bossWorkMock.mockReset().mockResolvedValue('worker-id')
+  createPgBossMock.mockReset().mockImplementation(() => ({
+    start: bossStartMock,
+    stop: bossStopMock,
+    getQueue: bossGetQueueMock,
+    createQueue: bossCreateQueueMock,
+    schedule: bossScheduleMock,
+    work: bossWorkMock,
+  }))
 })
 
 afterEach(() => {
   process.env = { ...ORIGINAL_ENV }
 })
 
-describe('apps/api boot', () => {
-  it('binds to an ephemeral port and serves GET /health when API_PORT=0', async () => {
-    setValidEnv()
-    const { lines, logger } = captureLogs()
+describe('apps/worker boot', () => {
+  it('starts pg-boss with the configured DATABASE_URL', async () => {
+    setValidEnv({ DATABASE_URL: 'postgres://user:pw@db.example.com:5432/dialogus' })
+    const { logger } = captureLogs()
 
     const { start } = await import('../src/index')
     const boot = await start({ logger })
     try {
-      expect(boot.port).toBeGreaterThan(0)
-      expect(boot.config.API_PORT).toBe(0)
-
-      const res = await fetch(`http://127.0.0.1:${boot.port}/health`)
-      expect(res.status).toBe(200)
-      expect(res.headers.get('content-type')).toMatch(/application\/json/)
-      expect(await res.json()).toEqual({ api: 'up', db: 'up', pgboss: 'up' })
-
-      const startupLine = lines.find(
-        (line) => typeof line.msg === 'string' && /api listening on :/.test(line.msg as string),
+      expect(createPgBossMock).toHaveBeenCalledWith(
+        'postgres://user:pw@db.example.com:5432/dialogus',
       )
-      expect(startupLine).toBeDefined()
+      expect(bossStartMock).toHaveBeenCalledTimes(1)
+      expect(boot.boss).toBeDefined()
     } finally {
       await boot.shutdown()
     }
   })
 
-  it('logs API_PORT and a redacted DATABASE_URL on startup (no password)', async () => {
+  it('registers the catalog cleanup queue + schedule + worker handler', async () => {
+    setValidEnv()
+    const { logger } = captureLogs()
+
+    const { start } = await import('../src/index')
+    const boot = await start({ logger })
+    try {
+      expect(bossGetQueueMock).toHaveBeenCalledWith('catalog.cleanup-idempotency-keys')
+      expect(bossCreateQueueMock).toHaveBeenCalledWith('catalog.cleanup-idempotency-keys')
+      expect(bossScheduleMock).toHaveBeenCalledTimes(1)
+      expect(bossScheduleMock).toHaveBeenCalledWith(
+        'catalog.cleanup-idempotency-keys',
+        '0 * * * *',
+        {},
+      )
+      expect(bossWorkMock).toHaveBeenCalledTimes(1)
+      expect(bossWorkMock.mock.calls[0]?.[0]).toBe('catalog.cleanup-idempotency-keys')
+      expect(typeof bossWorkMock.mock.calls[0]?.[1]).toBe('function')
+    } finally {
+      await boot.shutdown()
+    }
+  })
+
+  it('does not re-create the cleanup queue when it already exists', async () => {
+    setValidEnv()
+    bossGetQueueMock.mockResolvedValueOnce({ name: 'catalog.cleanup-idempotency-keys' })
+    const { logger } = captureLogs()
+
+    const { start } = await import('../src/index')
+    const boot = await start({ logger })
+    try {
+      expect(bossGetQueueMock).toHaveBeenCalledWith('catalog.cleanup-idempotency-keys')
+      expect(bossCreateQueueMock).not.toHaveBeenCalled()
+      expect(bossScheduleMock).toHaveBeenCalledTimes(1)
+    } finally {
+      await boot.shutdown()
+    }
+  })
+
+  it('logs a redacted DATABASE_URL on startup (no password)', async () => {
     setValidEnv({ DATABASE_URL: 'postgres://user:secretpass@db.example.com:5432/dialogus' })
     const { lines, logger } = captureLogs()
 
@@ -101,11 +149,10 @@ describe('apps/api boot', () => {
     const boot = await start({ logger })
     try {
       const startupLine = lines.find(
-        (line) => typeof line.msg === 'string' && /api listening on :/.test(line.msg as string),
+        (line) => typeof line.msg === 'string' && /worker started/.test(line.msg as string),
       )
       expect(startupLine).toBeDefined()
       expect(startupLine?.NODE_ENV).toBe('test')
-      expect(startupLine?.API_PORT).toBe(boot.port)
       expect(startupLine?.DATABASE_URL).toBe('postgres://db.example.com:5432/dialogus')
       const serialized = JSON.stringify(startupLine)
       expect(serialized).not.toContain('secretpass')
@@ -131,7 +178,6 @@ describe('apps/api boot', () => {
   it('main() exits 1 when env validation fails', async () => {
     setValidEnv()
     delete process.env.DATABASE_URL
-    process.env.API_PORT = '0'
 
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`__exit:${code}`)
@@ -166,17 +212,7 @@ describe('apps/api boot', () => {
 
     expect(exitCode).toBe(0)
     expect(Date.now() - begin).toBeLessThan(10_000)
-    expect(dbClientEndMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('shutdown is idempotent (second call resolves without re-closing)', async () => {
-    setValidEnv()
-    const { logger } = captureLogs()
-
-    const { start } = await import('../src/index')
-    const boot = await start({ logger })
-    await boot.shutdown()
-    await boot.shutdown()
+    expect(bossStopMock).toHaveBeenCalledTimes(1)
     expect(dbClientEndMock).toHaveBeenCalledTimes(1)
   })
 
@@ -202,6 +238,18 @@ describe('apps/api boot', () => {
     expect(exitCode).toBe(0)
   })
 
+  it('shutdown is idempotent (second call resolves without re-closing)', async () => {
+    setValidEnv()
+    const { logger } = captureLogs()
+
+    const { start } = await import('../src/index')
+    const boot = await start({ logger })
+    await boot.shutdown()
+    await boot.shutdown()
+    expect(dbClientEndMock).toHaveBeenCalledTimes(1)
+    expect(bossStopMock).toHaveBeenCalledTimes(1)
+  })
+
   it('shutdown handles db client without $client (no-op DB)', async () => {
     setValidEnv()
     const { logger } = captureLogs()
@@ -213,103 +261,7 @@ describe('apps/api boot', () => {
     const boot = await start({ logger })
     await boot.shutdown()
     expect(dbClientEndMock).not.toHaveBeenCalled()
-  })
-
-  it('does not start a long-running pg-boss instance at boot', async () => {
-    setValidEnv()
-    const { logger } = captureLogs()
-    const dbModule = await import('@dialogus/db')
-    const createPgBossSpy = vi.spyOn(dbModule, 'createPgBoss')
-
-    const { start } = await import('../src/index')
-    const boot = await start({ logger })
-    try {
-      expect(createPgBossSpy).not.toHaveBeenCalled()
-      expect((boot as unknown as { boss?: unknown }).boss).toBeUndefined()
-    } finally {
-      await boot.shutdown()
-      createPgBossSpy.mockRestore()
-    }
-  })
-
-  it('mounts catalog routes provided via the routes option', async () => {
-    setValidEnv()
-    const { logger } = captureLogs()
-    const catalog = new Hono()
-    catalog.get('/search', (c) => c.json({ data: [], meta: { count: 0 } }, 200))
-
-    const { start } = await import('../src/index')
-    const boot = await start({
-      logger,
-      routes: [{ prefix: '/api/catalog', app: catalog }],
-    })
-    try {
-      const res = await fetch(`http://127.0.0.1:${boot.port}/api/catalog/search`)
-      expect(res.status).toBe(200)
-      const body = (await res.json()) as { data: unknown; meta: { count: number } }
-      expect(body).toEqual({ data: [], meta: { count: 0 } })
-    } finally {
-      await boot.shutdown()
-    }
-  })
-
-  it('request-id middleware echoes a generated x-trace-id on every response', async () => {
-    setValidEnv()
-    const { logger } = captureLogs()
-
-    const { start } = await import('../src/index')
-    const boot = await start({ logger })
-    try {
-      const res = await fetch(`http://127.0.0.1:${boot.port}/health`)
-      const traceId = res.headers.get('x-trace-id')
-      expect(traceId).toBeTruthy()
-      expect(traceId).toMatch(/^[0-9a-f-]{36}$/i)
-    } finally {
-      await boot.shutdown()
-    }
-  })
-
-  it('request-id middleware preserves an incoming x-trace-id header', async () => {
-    setValidEnv()
-    const { logger } = captureLogs()
-
-    const { start } = await import('../src/index')
-    const boot = await start({ logger })
-    try {
-      const res = await fetch(`http://127.0.0.1:${boot.port}/health`, {
-        headers: { 'x-trace-id': 'incoming-trace-1' },
-      })
-      expect(res.headers.get('x-trace-id')).toBe('incoming-trace-1')
-    } finally {
-      await boot.shutdown()
-    }
-  })
-
-  it('problem middleware converts thrown errors from mounted routes into RFC 9457 envelopes', async () => {
-    setValidEnv()
-    const { logger } = captureLogs()
-    const { BookNotFoundError } = await import('@dialogus/catalog')
-    const catalog = new Hono()
-    catalog.get('/books/:id', () => {
-      throw new BookNotFoundError('Book uuid-x not found')
-    })
-
-    const { start } = await import('../src/index')
-    const boot = await start({
-      logger,
-      routes: [{ prefix: '/api/catalog', app: catalog }],
-    })
-    try {
-      const res = await fetch(`http://127.0.0.1:${boot.port}/api/catalog/books/abc`)
-      expect(res.status).toBe(404)
-      expect(res.headers.get('content-type')).toBe('application/problem+json')
-      const body = (await res.json()) as Record<string, unknown>
-      expect(body.status).toBe(404)
-      expect(body.detail).toBe('Book uuid-x not found')
-      expect(body.instance).toBe('/api/catalog/books/abc')
-    } finally {
-      await boot.shutdown()
-    }
+    expect(bossStopMock).toHaveBeenCalledTimes(1)
   })
 })
 

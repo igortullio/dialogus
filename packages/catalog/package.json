@@ -12,11 +12,18 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@dialogus/db": "workspace:*",
     "@dialogus/shared": "workspace:*",
     "zod": "^4.0.0"
   },
+  "peerDependencies": {
+    "drizzle-orm": "^0.45.0",
+    "postgres": "^3.4.0"
+  },
   "devDependencies": {
     "@types/node": "^22.10.5",
+    "drizzle-orm": "^0.45.0",
+    "postgres": "^3.4.0",
     "typescript": "^6.0.0",
     "vitest": "^4.0.0"
   }

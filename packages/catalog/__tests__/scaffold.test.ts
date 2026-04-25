@@ -19,18 +19,22 @@ describe('@dialogus/catalog package.json', () => {
     expect(pkg.private).toBe(true)
   })
 
-  it('declares the required runtime dependencies and nothing more', () => {
+  it('declares the required runtime dependencies', () => {
     const deps = pkg.dependencies as Record<string, string> | undefined
     expect(deps).toBeDefined()
     expect(deps?.['@dialogus/shared']).toBe('workspace:*')
+    expect(deps?.['@dialogus/db']).toBe('workspace:*')
     expect(deps?.zod).toBeTypeOf('string')
   })
 
-  it('does not pull in Drizzle, an HTTP client, or @dialogus/db at the domain layer', () => {
+  it('declares Drizzle and postgres as peerDependencies (provided via @dialogus/db)', () => {
+    const peers = (pkg.peerDependencies ?? {}) as Record<string, string>
+    expect(peers['drizzle-orm']).toBeTypeOf('string')
+    expect(peers.postgres).toBeTypeOf('string')
+  })
+
+  it('does not pull in an HTTP client at this point in the build (task_08 adds them)', () => {
     const deps = (pkg.dependencies ?? {}) as Record<string, string>
-    expect('drizzle-orm' in deps).toBe(false)
-    expect('postgres' in deps).toBe(false)
-    expect('@dialogus/db' in deps).toBe(false)
     expect('lru-cache' in deps).toBe(false)
     expect('undici' in deps).toBe(false)
     expect('axios' in deps).toBe(false)

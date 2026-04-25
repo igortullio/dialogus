@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url'
 import { createDatabase, type Database } from '@dialogus/db'
-import { type DialogusEnv, loadConfig } from '@dialogus/shared/config'
+import { type DialogusEnv, loadConfig, loadEnvFromRoot } from '@dialogus/shared/config'
 import { type ServerType, serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { type Logger, pino, stdSerializers } from 'pino'
@@ -123,6 +123,7 @@ export function attachSignalHandlers(
 
 export async function main(): Promise<void> {
   try {
+    loadEnvFromRoot()
     const boot = await start()
     attachSignalHandlers(boot)
   } catch (error) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { loadConfig } from '@dialogus/shared/config'
+import { loadConfig, loadEnvFromRoot } from '@dialogus/shared/config'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import { createDatabase } from './client'
 import { logger } from './logger'
@@ -45,6 +45,7 @@ export function isCliEntry(metaUrl: string, argv: ReadonlyArray<string>): boolea
 
 /* v8 ignore start */
 if (isCliEntry(import.meta.url, process.argv)) {
+  loadEnvFromRoot()
   const config = loadConfig()
   runMigrations(config.DATABASE_URL).catch(() => {
     process.exitCode = 1

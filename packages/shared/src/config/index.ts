@@ -1,5 +1,21 @@
+import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { z } from 'zod'
 import { ConfigError } from '../errors/index.js'
+
+export function loadEnvFromRoot(startDir: string = process.cwd()): boolean {
+  let dir = startDir
+  while (true) {
+    const candidate = resolve(dir, '.env')
+    if (existsSync(candidate)) {
+      process.loadEnvFile(candidate)
+      return true
+    }
+    const parent = dirname(dir)
+    if (parent === dir) return false
+    dir = parent
+  }
+}
 
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

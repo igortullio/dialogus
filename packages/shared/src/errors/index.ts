@@ -21,3 +21,12 @@ export class InvalidCursorError extends DialogusError {
     super('INVALID_CURSOR', `Invalid cursor: ${cursor}`, cause)
   }
 }
+
+export class IdempotencyKeyConflictError extends DialogusError {
+  constructor(
+    public readonly key: string,
+    message = `Idempotency-Key ${key} reused with a different request body`,
+  ) {
+    super('IDEMPOTENCY_KEY_CONFLICT', message)
+  }
+}

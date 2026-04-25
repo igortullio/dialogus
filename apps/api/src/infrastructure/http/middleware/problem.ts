@@ -2,6 +2,7 @@ import { BookNotFoundError, DuplicateBookError, GutendexUpstreamError } from '@d
 import {
   ConfigError,
   DialogusError,
+  IdempotencyKeyConflictError,
   InvalidCursorError,
   ValidationError,
 } from '@dialogus/shared/errors'
@@ -72,6 +73,13 @@ function mapError(err: Error, path: string): MappedError {
     return {
       body: { ...problemDetails('invalid-cursor', 400, err.message), instance: path },
       status: 400,
+    }
+  }
+
+  if (err instanceof IdempotencyKeyConflictError) {
+    return {
+      body: { ...problemDetails('idempotency-key-conflict', 422, err.message), instance: path },
+      status: 422,
     }
   }
 

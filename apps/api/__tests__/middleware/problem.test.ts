@@ -1,5 +1,10 @@
 import { BookNotFoundError, DuplicateBookError, GutendexUpstreamError } from '@dialogus/catalog'
-import { ConfigError, InvalidCursorError, ValidationError } from '@dialogus/shared/errors'
+import {
+  ConfigError,
+  IdempotencyKeyConflictError,
+  InvalidCursorError,
+  ValidationError,
+} from '@dialogus/shared/errors'
 import { PROBLEM_TYPE_PREFIX } from '@dialogus/shared/http/problem'
 import { Hono } from 'hono'
 import { pino, stdSerializers } from 'pino'
@@ -139,6 +144,29 @@ describe('problem middleware', () => {
     expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}invalid-cursor`)
     expect(body.status).toBe(400)
     expect(body.detail).toBe('Invalid cursor: bad')
+  })
+
+  it('maps IdempotencyKeyConflictError to 422 + idempotency-key-conflict', async () => {
+    const { lines, logger } = captureLogs()
+    const app = buildApp(logger, () => {
+      throw new IdempotencyKeyConflictError('key-99')
+    })
+
+    const res = await app.request('/test', { method: 'GET' })
+    const body = (await res.json()) as Record<string, unknown>
+
+    expect(res.status).toBe(422)
+    expect(res.headers.get('content-type')).toBe('application/problem+json')
+    expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}idempotency-key-conflict`)
+    expect(body.status).toBe(422)
+    expect(body.detail).toBe('Idempotency-Key key-99 reused with a different request body')
+
+    expect(lines[0]).toMatchObject({
+      level: 40,
+      error_code: 'IDEMPOTENCY_KEY_CONFLICT',
+      error_name: 'IdempotencyKeyConflictError',
+      status: 422,
+    })
   })
 
   it('maps ZodError to 400 validation-failed with errors[] field paths', async () => {

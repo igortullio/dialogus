@@ -26,14 +26,14 @@ describe('@dialogus/ingestion package.json', () => {
     expect(deps?.['@dialogus/db']).toBe('workspace:*')
     expect(deps?.['drizzle-orm']).toBeTypeOf('string')
     expect(deps?.zod).toBeTypeOf('string')
+    expect(deps?.bottleneck).toBeTypeOf('string')
   })
 
-  it('does not yet pull in adapter libraries (added by later infrastructure tasks)', () => {
+  it('does not yet pull in adapter libraries reserved for later infrastructure tasks', () => {
     const deps = (pkg.dependencies ?? {}) as Record<string, string>
     expect('@gxl/epub-parser' in deps).toBe(false)
     expect('epub2' in deps).toBe(false)
     expect('@ai-sdk/openai' in deps).toBe(false)
-    expect('bottleneck' in deps).toBe(false)
   })
 
   it('exposes typecheck + test scripts', () => {

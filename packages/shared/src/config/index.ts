@@ -4,8 +4,8 @@ import { ConfigError } from '../errors/index.js'
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   DATABASE_URL: z.string().url(),
-  API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
-  WEB_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  API_PORT: z.coerce.number().int().min(0).max(65535).default(3001),
+  WEB_PORT: z.coerce.number().int().min(0).max(65535).default(3000),
   NEXT_PUBLIC_API_URL: z.string().url().default('http://localhost:3001'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
   ANTHROPIC_API_KEY: z.string().optional(),

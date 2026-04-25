@@ -49,6 +49,7 @@
       "!**/build",
       "!**/coverage",
       "!**/.next",
+      "!**/next-env.d.ts",
       "!**/*.gen.ts",
       "!**/drizzle",
       "!**/.compozy"

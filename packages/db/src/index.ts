@@ -1,3 +1,5 @@
 export { createDatabase, type Database } from './client'
+export { runMigrations } from './migrate'
+export { createPgBoss, type PgBoss } from './pgboss'
 export { probeDb, probePgBoss } from './probes'
 export * as schema from './schema'

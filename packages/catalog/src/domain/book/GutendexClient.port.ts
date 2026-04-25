@@ -25,6 +25,7 @@ export interface GutendexSearchQuery {
   topic?: string
   sort?: GutendexSort
   page?: number
+  limit?: number
 }
 
 export interface GutendexSearchResult {

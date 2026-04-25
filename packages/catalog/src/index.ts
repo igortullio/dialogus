@@ -1,3 +1,16 @@
+export {
+  type GetGutendexBookDeps,
+  getGutendexBook,
+} from './application/getGutendexBook'
+export {
+  type RemoteBook,
+  toBookFromGutendex,
+} from './application/mappers/toBookFromGutendex'
+export {
+  type SearchGutendexDeps,
+  type SearchGutendexResult,
+  searchGutendex,
+} from './application/searchGutendex'
 export type { Book, BookAuthor } from './domain/book/Book'
 export {
   BookNotFoundError,

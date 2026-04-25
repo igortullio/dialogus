@@ -96,9 +96,4 @@ describe('@dialogus/catalog barrel', () => {
     const indexSource = readPackageFile('src/index.ts')
     expect(indexSource).not.toMatch(/['"][^'"]*infrastructure[^'"]*['"]/)
   })
-
-  it('does not re-export anything from application/ at this layer', () => {
-    const indexSource = readPackageFile('src/index.ts')
-    expect(indexSource).not.toMatch(/['"][^'"]*application[^'"]*['"]/)
-  })
 })

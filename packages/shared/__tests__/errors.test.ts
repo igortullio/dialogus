@@ -1,4 +1,10 @@
-import { ConfigError, DialogusError, NotFoundError, ValidationError } from '@dialogus/shared/errors'
+import {
+  ConfigError,
+  DialogusError,
+  InvalidCursorError,
+  NotFoundError,
+  ValidationError,
+} from '@dialogus/shared/errors'
 import { describe, expect, it } from 'vitest'
 
 const subclasses = [
@@ -55,5 +61,22 @@ describe('DialogusError hierarchy', () => {
     const err = new ConfigError('MISSING_ENV', 'x')
     expect(err.code).toBe('MISSING_ENV')
     expect(err.name).toBe('ConfigError')
+  })
+})
+
+describe('InvalidCursorError', () => {
+  it('hard-codes the INVALID_CURSOR code and surfaces the offending cursor', () => {
+    const err = new InvalidCursorError('not-a-cursor')
+    expect(err.code).toBe('INVALID_CURSOR')
+    expect(err.cursor).toBe('not-a-cursor')
+    expect(err.name).toBe('InvalidCursorError')
+    expect(err).toBeInstanceOf(DialogusError)
+    expect(err).toBeInstanceOf(Error)
+  })
+
+  it('preserves the original cause when one is passed', () => {
+    const original = new SyntaxError('Unexpected end of JSON input')
+    const err = new InvalidCursorError('bad', original)
+    expect(err.cause).toBe(original)
   })
 })

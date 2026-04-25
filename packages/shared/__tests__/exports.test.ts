@@ -21,6 +21,8 @@ describe('@dialogus/shared exports map', () => {
     expect(mod).toBeTypeOf('object')
     expect(typeof mod.envelope).toBe('function')
     expect(typeof mod.problemDetails).toBe('function')
+    expect(typeof mod.encodeCursor).toBe('function')
+    expect(typeof mod.decodeCursor).toBe('function')
   })
 
   it('resolves the ./http/envelope subpath', async () => {
@@ -31,6 +33,12 @@ describe('@dialogus/shared exports map', () => {
   it('resolves the ./http/problem subpath', async () => {
     const mod = await import('@dialogus/shared/http/problem')
     expect(typeof mod.problemDetails).toBe('function')
+  })
+
+  it('resolves the ./http/cursor subpath', async () => {
+    const mod = await import('@dialogus/shared/http/cursor')
+    expect(typeof mod.encodeCursor).toBe('function')
+    expect(typeof mod.decodeCursor).toBe('function')
   })
 
   it('resolves the ./types subpath', async () => {

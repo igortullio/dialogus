@@ -36,15 +36,15 @@ describe('README.md', () => {
     expect(contents).toMatch(/Single-user RAG study companion over public-domain classics/)
   })
 
-  it('lists Node, pnpm, and Docker requirements', () => {
+  it('lists Node, pnpm, and Docker requirements with explicit versions', () => {
     expect(contents).toMatch(/Node\.js\s+\*\*22\.13\+\*\*/)
     expect(contents).toMatch(/pnpm\s+\*\*9\.15\+\*\*/)
-    expect(contents).toMatch(/Docker Desktop/)
+    expect(contents).toMatch(/Docker Desktop\s+\*\*[≥>]=?\s*4\.30\*\*/)
   })
 
-  it('contains the exact 5-line quickstart block', () => {
+  it('contains the exact 5-command quickstart block in order', () => {
     const expected = [
-      'cp .env.example .env',
+      'corepack enable',
       'pnpm install',
       'docker compose up -d',
       'pnpm db:migrate',
@@ -53,15 +53,47 @@ describe('README.md', () => {
     expect(contents).toContain(expected)
   })
 
-  it('includes placeholder sections for Architecture and Next Steps', () => {
-    expect(contents).toMatch(/##\s+Architecture\b/)
-    expect(contents).toMatch(/##\s+Next Steps\b/)
-    expect(contents).toMatch(/Filled in by task_20/)
+  it('exposes the canonical Requirements, Architecture, and Next steps headings', () => {
+    expect(contents).toMatch(/^##\s+(Requirements|Requisitos)\b/m)
+    expect(contents).toMatch(/^##\s+(Architecture|Arquitetura)\b/m)
+    expect(contents).toMatch(/^##\s+(Next steps|Próximos passos)\b/im)
   })
 
-  it('cites Conventional Commits as the commit message convention', () => {
+  it('points Next steps at the Feature 001 catalog PRD', () => {
+    expect(contents).toMatch(/\.compozy\/tasks\/001-catalog\/_prd\.md/)
+  })
+
+  it('mentions the Postgres 17 fallback note from ADR-001', () => {
+    expect(contents).toMatch(/pgvector\/pgvector:pg17/)
+    expect(contents).toMatch(/Postgres\s+17|pg17/i)
+  })
+
+  it('keeps the Architecture summary at three or more paragraphs', () => {
+    const lines = contents.split('\n')
+    const startIdx = lines.findIndex((line) => /^##\s+(Architecture|Arquitetura)\b/.test(line))
+    expect(startIdx, 'Architecture heading is missing').toBeGreaterThanOrEqual(0)
+    let endIdx = lines.length
+    for (let i = startIdx + 1; i < lines.length; i++) {
+      const line = lines[i]
+      if (line !== undefined && /^##\s+/.test(line)) {
+        endIdx = i
+        break
+      }
+    }
+    const body = lines.slice(startIdx + 1, endIdx).join('\n')
+    const paragraphs = body
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0 && !p.startsWith('#') && !p.startsWith('```'))
+    expect(paragraphs.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('cites Conventional Commits as the commit message convention with example prefixes', () => {
     expect(contents).toMatch(/Conventional Commits/)
     expect(contents).toMatch(/conventionalcommits\.org/)
+    expect(contents).toMatch(/feat\(api\)/)
+    expect(contents).toMatch(/chore\(repo\)/)
+    expect(contents).toMatch(/docs:/)
   })
 
   it('links to the MIT LICENSE file', () => {

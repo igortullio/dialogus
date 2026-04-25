@@ -16,6 +16,23 @@ describe('@dialogus/shared exports map', () => {
     expect(mod).toBeTypeOf('object')
   })
 
+  it('resolves the ./http subpath', async () => {
+    const mod = await import('@dialogus/shared/http')
+    expect(mod).toBeTypeOf('object')
+    expect(typeof mod.envelope).toBe('function')
+    expect(typeof mod.problemDetails).toBe('function')
+  })
+
+  it('resolves the ./http/envelope subpath', async () => {
+    const mod = await import('@dialogus/shared/http/envelope')
+    expect(typeof mod.envelope).toBe('function')
+  })
+
+  it('resolves the ./http/problem subpath', async () => {
+    const mod = await import('@dialogus/shared/http/problem')
+    expect(typeof mod.problemDetails).toBe('function')
+  })
+
   it('resolves the ./types subpath', async () => {
     const mod = await import('@dialogus/shared/types')
     expect(mod).toBeTypeOf('object')

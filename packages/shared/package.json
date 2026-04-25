@@ -8,6 +8,9 @@
     ".": "./src/index.ts",
     "./config": "./src/config/index.ts",
     "./errors": "./src/errors/index.ts",
+    "./http": "./src/http/index.ts",
+    "./http/envelope": "./src/http/envelope.ts",
+    "./http/problem": "./src/http/problem.ts",
     "./types": "./src/types/index.ts",
     "./schemas/health": "./src/schemas/health.ts"
   },

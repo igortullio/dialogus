@@ -1,0 +1,27 @@
+# Chapter detection heuristics for plain-text Project Gutenberg dumps (per ADR-006).
+#
+# Conventions:
+#   - Patterns are matched line-by-line after trimming surrounding whitespace.
+#   - Anchor with ^ ... \s*$ where you want to match the entire line.
+#   - The 'i' (case-insensitive) flag is added automatically by the loader, so write
+#     patterns in their natural case and let the loader handle ALL CAPS variants.
+#   - Patterns are evaluated in declaration order; first match wins per line.
+#   - When zero patterns match in a whole book, the parser yields a single chapter
+#     using the language's fallback_title.
+#
+# Loader: src/infrastructure/parsing/chapter-heuristics.ts
+# Schema: ChapterHeuristicsSchema (zod). Adding/removing top-level keys requires a
+# schema update to keep boot validation aligned.
+en:
+  patterns:
+    - '^CHAPTER\s+[IVXLCDM]+\.?\s*$'
+    - '^Chapter\s+\d+\.?\s*$'
+    - '^CHAPTER\s+\d+'
+  fallback_title: 'Full text'
+pt:
+  patterns:
+    - '^CAP[ÍI]TULO\s+\d+\.?\s*$'
+    - '^Cap[íi]tulo\s+\d+\.?\s*$'
+    - '^CAP[ÍI]TULO\s+[IVXLCDM]+\.?\s*$'
+    - '^PARTE\s+\w+\.?\s*$'
+  fallback_title: 'Texto completo'

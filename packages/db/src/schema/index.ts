@@ -4,5 +4,7 @@ export {
   INGESTION_STATUS_VALUES,
   type IngestionStatus,
 } from './books'
+export { chapters } from './chapters'
+export { CHUNK_EMBEDDING_DIMENSIONS, chunks } from './chunks'
 export { idempotencyKeys } from './idempotency_keys'
 export { systemHealth } from './system_health'

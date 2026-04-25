@@ -43,7 +43,11 @@ describe('books table', () => {
         'download_url_txt',
         'gutendex_id',
         'id',
+        'indexed_at',
         'ingestion_error',
+        'ingestion_last_stage',
+        'ingestion_progress',
+        'ingestion_started_at',
         'ingestion_status',
         'languages',
         'raw_hash',
@@ -177,12 +181,42 @@ describe('books table', () => {
   })
 
   it('declares the ingestion_status CHECK constraint via the table config', () => {
-    expect(config.checks).toHaveLength(1)
-    const constraint = config.checks[0]
-    if (!constraint) throw new Error('expected CHECK constraint on books')
-    expect(constraint.name).toBe('books_ingestion_status_check')
-    expect(renderSql(constraint.value)).toContain(`'discovered'`)
-    expect(renderSql(constraint.value)).toContain(`'failed'`)
+    const statusCheck = config.checks.find((c) => c.name === 'books_ingestion_status_check')
+    if (!statusCheck) throw new Error('expected ingestion_status CHECK constraint on books')
+    expect(renderSql(statusCheck.value)).toContain(`'discovered'`)
+    expect(renderSql(statusCheck.value)).toContain(`'failed'`)
+  })
+
+  it('marks ingestion_progress as not-null integer defaulting to 0', () => {
+    const progress = getColumn('ingestion_progress')
+    expect(progress.columnType).toBe('PgInteger')
+    expect(progress.notNull).toBe(true)
+    expect(progress.hasDefault).toBe(true)
+    expect(progress.default).toBe(0)
+  })
+
+  it('marks ingestion_last_stage as nullable text without a default', () => {
+    const lastStage = getColumn('ingestion_last_stage')
+    expect(lastStage.columnType).toBe('PgText')
+    expect(lastStage.notNull).toBe(false)
+    expect(lastStage.hasDefault).toBe(false)
+  })
+
+  it.each([
+    'ingestion_started_at',
+    'indexed_at',
+  ])('marks %s as a nullable timestamptz without a default', (name) => {
+    const column = getColumn(name) as Column & { withTimezone?: boolean }
+    expect(column.columnType).toBe('PgTimestamp')
+    expect(column.notNull).toBe(false)
+    expect(column.hasDefault).toBe(false)
+    expect(column.withTimezone).toBe(true)
+  })
+
+  it('declares the ingestion_progress CHECK constraint via the table config', () => {
+    const progressCheck = config.checks.find((c) => c.name === 'books_ingestion_progress_check')
+    if (!progressCheck) throw new Error('expected ingestion_progress CHECK constraint on books')
+    expect(renderSql(progressCheck.value)).toContain('BETWEEN 0 AND 100')
   })
 })
 

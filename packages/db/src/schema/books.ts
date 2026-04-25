@@ -36,6 +36,10 @@ export const books = pgTable(
       .notNull()
       .default('discovered'),
     ingestionError: text('ingestion_error'),
+    ingestionProgress: integer('ingestion_progress').notNull().default(0),
+    ingestionLastStage: text('ingestion_last_stage'),
+    ingestionStartedAt: timestamp('ingestion_started_at', { withTimezone: true }),
+    indexedAt: timestamp('indexed_at', { withTimezone: true }),
     tags: jsonb('tags').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -52,5 +56,6 @@ export const books = pgTable(
       'books_ingestion_status_check',
       sql`${table.ingestionStatus} IN ('discovered', 'downloading', 'parsing', 'chunking', 'embedding', 'ready', 'failed')`,
     ),
+    check('books_ingestion_progress_check', sql`${table.ingestionProgress} BETWEEN 0 AND 100`),
   ],
 )

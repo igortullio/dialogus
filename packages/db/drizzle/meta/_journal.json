@@ -8,6 +8,13 @@
       "when": 1777077349361,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777110148279,
+      "tag": "0001_books",
+      "breakpoints": true
     }
   ]
 }

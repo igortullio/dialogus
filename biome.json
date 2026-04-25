@@ -50,7 +50,8 @@
       "!**/coverage",
       "!**/.next",
       "!**/*.gen.ts",
-      "!**/drizzle"
+      "!**/drizzle",
+      "!**/.compozy"
     ]
   }
 }

@@ -1,0 +1,26 @@
+{
+  "name": "@dialogus/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --build",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dialogus/db": "workspace:*",
+    "@dialogus/shared": "workspace:*",
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.12.0",
+    "pino": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "pino-pretty": "^11.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^6.0.0",
+    "vitest": "^4.0.0"
+  }
+}

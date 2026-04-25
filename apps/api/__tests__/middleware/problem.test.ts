@@ -1,6 +1,7 @@
 import { BookNotFoundError, DuplicateBookError, GutendexUpstreamError } from '@dialogus/catalog'
 import {
   ConfigError,
+  DialogusError,
   IdempotencyKeyConflictError,
   InvalidCursorError,
   ValidationError,
@@ -12,6 +13,7 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import {
   createProblemMiddleware,
+  INGESTION_PROBLEM_SLUGS,
   type ProblemVariables,
 } from '../../src/infrastructure/http/middleware/problem'
 
@@ -304,5 +306,81 @@ describe('problem middleware', () => {
     await app.request('/test', { method: 'GET', headers: { 'x-trace-id': 'header-loses' } })
 
     expect(lines[0]?.trace_id).toBe('ctx-trace')
+  })
+})
+
+describe('INGESTION_PROBLEM_SLUGS registry', () => {
+  it('maps every feature-002 slug to its default HTTP status code', () => {
+    expect(INGESTION_PROBLEM_SLUGS).toEqual({
+      'book-not-in-discovered-state': 409,
+      'book-not-in-retryable-state': 409,
+      'book-already-ready': 409,
+      'ingestion-download-failed': 503,
+      'ingestion-parse-failed': 422,
+      'ingestion-embed-failed': 503,
+      'chunk-not-found': 404,
+    })
+  })
+
+  it('exposes exactly seven new slugs (the task_01 inventory)', () => {
+    expect(Object.keys(INGESTION_PROBLEM_SLUGS)).toHaveLength(7)
+  })
+})
+
+describe('problem middleware ingestion error dispatch', () => {
+  const slugCases: Array<{
+    code: string
+    slug: keyof typeof INGESTION_PROBLEM_SLUGS
+    retryAfter: boolean
+  }> = [
+    {
+      code: 'BOOK_NOT_IN_DISCOVERED_STATE',
+      slug: 'book-not-in-discovered-state',
+      retryAfter: false,
+    },
+    { code: 'BOOK_NOT_IN_RETRYABLE_STATE', slug: 'book-not-in-retryable-state', retryAfter: false },
+    { code: 'BOOK_ALREADY_READY', slug: 'book-already-ready', retryAfter: false },
+    { code: 'INGESTION_DOWNLOAD_FAILED', slug: 'ingestion-download-failed', retryAfter: true },
+    { code: 'INGESTION_PARSE_FAILED', slug: 'ingestion-parse-failed', retryAfter: false },
+    { code: 'INGESTION_EMBED_FAILED', slug: 'ingestion-embed-failed', retryAfter: true },
+    { code: 'CHUNK_NOT_FOUND', slug: 'chunk-not-found', retryAfter: false },
+  ]
+
+  for (const { code, slug, retryAfter } of slugCases) {
+    it(`dispatches DialogusError(code=${code}) → ${slug} with status ${INGESTION_PROBLEM_SLUGS[slug]}`, async () => {
+      const { logger } = captureLogs()
+      const app = buildApp(logger, () => {
+        throw new DialogusError(code, `${slug} message`)
+      })
+
+      const res = await app.request('/test', { method: 'GET' })
+      const body = (await res.json()) as Record<string, unknown>
+
+      expect(res.status).toBe(INGESTION_PROBLEM_SLUGS[slug])
+      expect(res.headers.get('content-type')).toBe('application/problem+json')
+      expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}${slug}`)
+      expect(body.status).toBe(INGESTION_PROBLEM_SLUGS[slug])
+      expect(body.detail).toBe(`${slug} message`)
+
+      if (retryAfter) {
+        expect(res.headers.get('retry-after')).toBe('60')
+      } else {
+        expect(res.headers.get('retry-after')).toBeNull()
+      }
+    })
+  }
+
+  it('falls through to internal-error when DialogusError code is not registered', async () => {
+    const { logger } = captureLogs()
+    const app = buildApp(logger, () => {
+      throw new DialogusError('UNREGISTERED_CODE', 'leaks me')
+    })
+
+    const res = await app.request('/test', { method: 'GET' })
+    const body = (await res.json()) as Record<string, unknown>
+
+    expect(res.status).toBe(500)
+    expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}internal-error`)
+    expect(body.detail).toBe('unexpected error')
   })
 })

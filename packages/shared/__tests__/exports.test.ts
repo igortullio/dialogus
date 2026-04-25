@@ -50,4 +50,21 @@ describe('@dialogus/shared exports map', () => {
     const mod = await import('@dialogus/shared/schemas/health')
     expect(mod).toBeTypeOf('object')
   })
+
+  it('resolves the ./schemas/ingestion subpath', async () => {
+    const mod = await import('@dialogus/shared/schemas/ingestion')
+    expect(mod).toBeTypeOf('object')
+    expect(typeof mod.ingestionStatusDtoSchema.parse).toBe('function')
+    expect(typeof mod.chunkReadDtoSchema.parse).toBe('function')
+    expect(typeof mod.ingestionEnqueueResponseDtoSchema.parse).toBe('function')
+    expect(Array.isArray(mod.INGESTION_STATUS_VALUES)).toBe(true)
+    expect(Array.isArray(mod.INGESTION_STAGE_VALUES)).toBe(true)
+  })
+
+  it('resolves the ./schemas barrel subpath', async () => {
+    const mod = await import('@dialogus/shared/schemas')
+    expect(mod).toBeTypeOf('object')
+    expect(typeof mod.healthResponseSchema.parse).toBe('function')
+    expect(typeof mod.ingestionStatusDtoSchema.parse).toBe('function')
+  })
 })

@@ -18,6 +18,33 @@ import { ZodError } from 'zod'
 const PROBLEM_CONTENT_TYPE = 'application/problem+json'
 const GENERIC_INTERNAL_DETAIL = 'unexpected error'
 
+export const INGESTION_PROBLEM_SLUGS = {
+  'book-not-in-discovered-state': 409,
+  'book-not-in-retryable-state': 409,
+  'book-already-ready': 409,
+  'ingestion-download-failed': 503,
+  'ingestion-parse-failed': 422,
+  'ingestion-embed-failed': 503,
+  'chunk-not-found': 404,
+} as const satisfies Record<string, number>
+
+export type IngestionProblemSlug = keyof typeof INGESTION_PROBLEM_SLUGS
+
+const INGESTION_PROBLEM_SLUGS_WITH_RETRY_AFTER: ReadonlySet<IngestionProblemSlug> = new Set([
+  'ingestion-download-failed',
+  'ingestion-embed-failed',
+])
+
+const INGESTION_ERROR_CODE_TO_SLUG: Readonly<Record<string, IngestionProblemSlug>> = {
+  BOOK_NOT_IN_DISCOVERED_STATE: 'book-not-in-discovered-state',
+  BOOK_NOT_IN_RETRYABLE_STATE: 'book-not-in-retryable-state',
+  BOOK_ALREADY_READY: 'book-already-ready',
+  INGESTION_DOWNLOAD_FAILED: 'ingestion-download-failed',
+  INGESTION_PARSE_FAILED: 'ingestion-parse-failed',
+  INGESTION_EMBED_FAILED: 'ingestion-embed-failed',
+  CHUNK_NOT_FOUND: 'chunk-not-found',
+}
+
 export interface ProblemMiddlewareDeps {
   logger: Logger
 }
@@ -42,6 +69,20 @@ function zodIssuesToValidationIssues(error: ZodError): ValidationIssue[] {
     field: issue.path.map((segment) => String(segment)).join('.'),
     message: issue.message,
   }))
+}
+
+function mapIngestionDialogusError(err: DialogusError, path: string): MappedError | null {
+  const slug = INGESTION_ERROR_CODE_TO_SLUG[err.code]
+  if (slug === undefined) return null
+  const status = INGESTION_PROBLEM_SLUGS[slug]
+  const mapped: MappedError = {
+    body: { ...problemDetails(slug, status, err.message), instance: path },
+    status,
+  }
+  if (INGESTION_PROBLEM_SLUGS_WITH_RETRY_AFTER.has(slug)) {
+    mapped.headers = { 'retry-after': '60' }
+  }
+  return mapped
 }
 
 function mapError(err: Error, path: string): MappedError {
@@ -106,6 +147,11 @@ function mapError(err: Error, path: string): MappedError {
       body: { ...problemDetails('internal-error', 500, GENERIC_INTERNAL_DETAIL), instance: path },
       status: 500,
     }
+  }
+
+  if (err instanceof DialogusError) {
+    const ingestionMapped = mapIngestionDialogusError(err, path)
+    if (ingestionMapped !== null) return ingestionMapped
   }
 
   return {

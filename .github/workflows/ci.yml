@@ -43,10 +43,26 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.4 --activate
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:integration
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [lint-and-typecheck, test]
+    needs: [lint-and-typecheck, test, integration]
     steps:
       - uses: actions/checkout@v4
       - name: Enable Corepack

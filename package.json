@@ -6,7 +6,7 @@
     "dev": "pnpm --parallel -r dev",
     "build": "pnpm -r build",
     "test": "vitest run && pnpm -r test",
-    "test:integration": "vitest run --config ./vitest.integration.config.ts",
+    "test:integration": "pnpm -r --filter=@dialogus/api test:integration",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "pnpm -r typecheck",

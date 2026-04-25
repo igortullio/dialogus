@@ -54,14 +54,34 @@ describe('.github/workflows/ci.yml', () => {
     expect(c?.['cancel-in-progress']).toBe("${{ github.ref != 'refs/heads/main' }}")
   })
 
-  it('defines exactly the three jobs lint-and-typecheck, test, build', () => {
-    expect(Object.keys(workflow.jobs ?? {}).sort()).toEqual(['build', 'lint-and-typecheck', 'test'])
+  it('defines exactly the four jobs lint-and-typecheck, test, integration, build', () => {
+    expect(Object.keys(workflow.jobs ?? {}).sort()).toEqual([
+      'build',
+      'integration',
+      'lint-and-typecheck',
+      'test',
+    ])
   })
 
-  it('build job needs lint-and-typecheck and test', () => {
+  it('build job needs lint-and-typecheck, test, and integration', () => {
     const needs = workflow.jobs?.build?.needs
     expect(Array.isArray(needs)).toBe(true)
-    expect((needs as string[]).slice().sort()).toEqual(['lint-and-typecheck', 'test'])
+    expect((needs as string[]).slice().sort()).toEqual([
+      'integration',
+      'lint-and-typecheck',
+      'test',
+    ])
+  })
+
+  it('integration job runs pnpm test:integration with timeout ≤ 15 minutes', () => {
+    const job = workflow.jobs?.integration
+    expect(job).toBeDefined()
+    expect(job?.['runs-on']).toBe('ubuntu-latest')
+    const timeout = job?.['timeout-minutes'] ?? 0
+    expect(timeout).toBeGreaterThan(0)
+    expect(timeout).toBeLessThanOrEqual(15)
+    const runs = (job?.steps ?? []).map((s) => s.run ?? '')
+    expect(runs).toContain('pnpm test:integration')
   })
 
   it('every job runs on ubuntu-latest', () => {
@@ -84,7 +104,7 @@ describe('.github/workflows/ci.yml', () => {
         expect(step.with?.cache).toBe('pnpm')
       }
     }
-    expect(setupNodeCount).toBe(3)
+    expect(setupNodeCount).toBe(4)
   })
 
   it('every job activates Corepack with pinned pnpm@9.15.4 before pnpm install', () => {

@@ -23,6 +23,8 @@ describe('@dialogus/ingestion package.json', () => {
     const deps = pkg.dependencies as Record<string, string> | undefined
     expect(deps).toBeDefined()
     expect(deps?.['@dialogus/shared']).toBe('workspace:*')
+    expect(deps?.['@dialogus/db']).toBe('workspace:*')
+    expect(deps?.['drizzle-orm']).toBeTypeOf('string')
     expect(deps?.zod).toBeTypeOf('string')
   })
 
@@ -32,7 +34,6 @@ describe('@dialogus/ingestion package.json', () => {
     expect('epub2' in deps).toBe(false)
     expect('@ai-sdk/openai' in deps).toBe(false)
     expect('bottleneck' in deps).toBe(false)
-    expect('@dialogus/db' in deps).toBe(false)
   })
 
   it('exposes typecheck + test scripts', () => {

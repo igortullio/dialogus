@@ -12,7 +12,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@dialogus/db": "workspace:*",
     "@dialogus/shared": "workspace:*",
+    "drizzle-orm": "^0.45.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

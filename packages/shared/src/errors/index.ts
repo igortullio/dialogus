@@ -10,3 +10,5 @@ export class DialogusError extends Error {
 }
 
 export class ConfigError extends DialogusError {}
+export class NotFoundError extends DialogusError {}
+export class ValidationError extends DialogusError {}

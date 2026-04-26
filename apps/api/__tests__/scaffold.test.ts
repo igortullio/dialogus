@@ -86,12 +86,8 @@ describe('apps/api source layout (ADR-004)', () => {
     expect(statSync(routesDir).isDirectory()).toBe(true)
   })
 
-  it('does NOT contain a domain/ folder (introduced in Feature 001)', () => {
+  it('does NOT contain a domain/ folder (apps/api stays infrastructure-first per ADR-004)', () => {
     expect(existsSync(packagePath('src/domain'))).toBe(false)
-  })
-
-  it('does NOT contain an application/ folder (introduced in Feature 001)', () => {
-    expect(existsSync(packagePath('src/application'))).toBe(false)
   })
 
   it('ships a placeholder src/index.ts that wires loadConfig', () => {

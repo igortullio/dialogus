@@ -13,6 +13,7 @@
   "dependencies": {
     "@dialogus/catalog": "workspace:*",
     "@dialogus/db": "workspace:*",
+    "@dialogus/ingestion": "workspace:*",
     "@dialogus/shared": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "drizzle-orm": "^0.45.0",

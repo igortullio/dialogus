@@ -79,6 +79,14 @@ export class DrizzleChunkRepository implements ChunkRepository {
     return row?.count ?? 0
   }
 
+  async countByBookIdWithoutEmbedding(bookId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(chunks)
+      .where(and(eq(chunks.bookId, bookId), isNull(chunks.embedding)))
+    return row?.count ?? 0
+  }
+
   async findById(chunkId: string): Promise<Chunk | null> {
     const row = await this.db.query.chunks.findFirst({
       where: eq(chunks.id, chunkId),

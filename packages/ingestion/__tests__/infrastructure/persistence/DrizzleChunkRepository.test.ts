@@ -238,6 +238,20 @@ describe('DrizzleChunkRepository.countByBookId', () => {
   })
 })
 
+describe('DrizzleChunkRepository.countByBookIdWithoutEmbedding', () => {
+  it('returns the mocked count value', async () => {
+    const { db } = makeMockDb({ countRow: { count: 42 } })
+    const repo = new DrizzleChunkRepository(db)
+    expect(await repo.countByBookIdWithoutEmbedding('book-id')).toBe(42)
+  })
+
+  it('returns 0 when the count row is missing', async () => {
+    const { db } = makeMockDb({ countRow: undefined })
+    const repo = new DrizzleChunkRepository(db)
+    expect(await repo.countByBookIdWithoutEmbedding('book-id')).toBe(0)
+  })
+})
+
 describe('DrizzleChunkRepository.findById', () => {
   it('returns null when no row is found', async () => {
     const { db } = makeMockDb({ findFirstResult: undefined })

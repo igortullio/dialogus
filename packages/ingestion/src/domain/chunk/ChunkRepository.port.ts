@@ -11,5 +11,6 @@ export interface ChunkRepository {
   listByBookIdWithoutEmbedding(bookId: string): AsyncIterable<Chunk>
   updateEmbeddingsBatch(updates: readonly ChunkEmbeddingUpdate[]): Promise<void>
   countByBookId(bookId: string): Promise<number>
+  countByBookIdWithoutEmbedding(bookId: string): Promise<number>
   findById(chunkId: string): Promise<Chunk | null>
 }

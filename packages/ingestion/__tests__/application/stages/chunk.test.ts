@@ -144,6 +144,7 @@ function makeChunkRepo(existingCount = 0): ChunkRepoMock {
     })) as unknown as ChunkRepository['listByBookIdWithoutEmbedding'],
     updateEmbeddingsBatch: vi.fn(async () => {}),
     countByBookId,
+    countByBookIdWithoutEmbedding: vi.fn(async () => 0),
     findById: vi.fn(async () => null),
   }
   return { repo, saveMany, countByBookId, saved }

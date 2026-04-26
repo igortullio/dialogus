@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@dialogus/db": "workspace:*",
+    "@dialogus/ingestion": "workspace:*",
     "@dialogus/shared": "workspace:*",
     "drizzle-orm": "^0.45.0",
     "pg-boss": "^12.0.0",

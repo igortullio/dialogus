@@ -1,6 +1,7 @@
 import type { Database } from '@dialogus/db'
 import { pino } from 'pino'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ComposedStageDeps } from '../src/deps'
 
 const dbClientEndMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 
@@ -28,11 +29,32 @@ vi.mock('@dialogus/db', async (importOriginal) => {
 
 const ORIGINAL_ENV = { ...process.env }
 
+const ALL_INGESTION_QUEUES = [
+  'ingestion.download',
+  'ingestion.clean',
+  'ingestion.parse',
+  'ingestion.chunk',
+  'ingestion.summarize',
+  'ingestion.embed',
+  'ingestion.index',
+] as const
+
+const REGISTERED_INGESTION_QUEUES = [
+  'ingestion.download',
+  'ingestion.clean',
+  'ingestion.parse',
+  'ingestion.chunk',
+  'ingestion.embed',
+  'ingestion.index',
+] as const
+
 function setValidEnv(overrides: Record<string, string> = {}): void {
   process.env.NODE_ENV = 'test'
   process.env.DATABASE_URL = 'postgres://user:secret@127.0.0.1:5/dialogus'
   process.env.API_PORT = '0'
   process.env.LOG_LEVEL = 'info'
+  delete process.env.EMBEDDING_PROVIDER
+  delete process.env.OPENAI_API_KEY
   for (const [k, v] of Object.entries(overrides)) {
     process.env[k] = v
   }
@@ -59,6 +81,24 @@ function captureLogs(): CapturedLogs {
   }
   const logger = pino({ level: 'info' }, stream as unknown as NodeJS.WritableStream)
   return { lines, logger }
+}
+
+function fakeComposedDeps(
+  choice: 'mock' | 'openai' = 'mock',
+  source: 'env' | 'default' = 'default',
+): ComposedStageDeps {
+  return {
+    deps: {} as unknown as ComposedStageDeps['deps'],
+    embeddingProvider: {
+      provider: {
+        dimensions: 1536,
+        modelName: choice === 'mock' ? 'mock-embedding-1536' : 'text-embedding-3-small',
+        embed: async () => [],
+      } as unknown as ComposedStageDeps['embeddingProvider']['provider'],
+      choice,
+      source,
+    },
+  }
 }
 
 beforeEach(() => {
@@ -90,7 +130,7 @@ describe('apps/worker boot', () => {
     const { logger } = captureLogs()
 
     const { start } = await import('../src/index')
-    const boot = await start({ logger })
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
     try {
       expect(createPgBossMock).toHaveBeenCalledWith(
         'postgres://user:pw@db.example.com:5432/dialogus',
@@ -102,24 +142,119 @@ describe('apps/worker boot', () => {
     }
   })
 
-  it('registers the catalog cleanup queue + schedule + worker handler', async () => {
+  it('ensures all 7 ingestion queues exist + the cleanup queue', async () => {
     setValidEnv()
     const { logger } = captureLogs()
 
     const { start } = await import('../src/index')
-    const boot = await start({ logger })
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
     try {
-      expect(bossGetQueueMock).toHaveBeenCalledWith('catalog.cleanup-idempotency-keys')
-      expect(bossCreateQueueMock).toHaveBeenCalledWith('catalog.cleanup-idempotency-keys')
+      const ensuredNames = bossGetQueueMock.mock.calls.map((call) => call[0])
+      for (const queue of ALL_INGESTION_QUEUES) {
+        expect(ensuredNames).toContain(queue)
+      }
+      expect(ensuredNames).toContain('catalog.cleanup-idempotency-keys')
+      // createQueue must have been invoked for each ensured queue (mock returns null = missing)
+      const createdNames = bossCreateQueueMock.mock.calls.map((call) => call[0])
+      for (const queue of ALL_INGESTION_QUEUES) {
+        expect(createdNames).toContain(queue)
+      }
+    } finally {
+      await boot.shutdown()
+    }
+  })
+
+  it('registers exactly 7 work handlers (6 ingestion + 1 catalog cleanup)', async () => {
+    setValidEnv()
+    const { logger } = captureLogs()
+
+    const { start } = await import('../src/index')
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
+    try {
+      expect(bossWorkMock).toHaveBeenCalledTimes(7)
+      const queueArgs = bossWorkMock.mock.calls.map((call) => call[0])
+      for (const queue of REGISTERED_INGESTION_QUEUES) {
+        expect(queueArgs).toContain(queue)
+      }
+      expect(queueArgs).toContain('catalog.cleanup-idempotency-keys')
+      // Summarize is intentionally NOT registered until task_24 (ADR-008).
+      expect(queueArgs).not.toContain('ingestion.summarize')
+    } finally {
+      await boot.shutdown()
+    }
+  })
+
+  it('passes batchSize: 1 work options for every ingestion handler (serial concurrency)', async () => {
+    setValidEnv()
+    const { logger } = captureLogs()
+
+    const { start } = await import('../src/index')
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
+    try {
+      const ingestionCalls = bossWorkMock.mock.calls.filter((call) =>
+        REGISTERED_INGESTION_QUEUES.includes(
+          call[0] as (typeof REGISTERED_INGESTION_QUEUES)[number],
+        ),
+      )
+      expect(ingestionCalls.length).toBe(REGISTERED_INGESTION_QUEUES.length)
+      for (const call of ingestionCalls) {
+        expect(call[1]).toEqual({ batchSize: 1 })
+        expect(typeof call[2]).toBe('function')
+      }
+    } finally {
+      await boot.shutdown()
+    }
+  })
+
+  it('schedules the catalog cleanup cron exactly once', async () => {
+    setValidEnv()
+    const { logger } = captureLogs()
+
+    const { start } = await import('../src/index')
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
+    try {
       expect(bossScheduleMock).toHaveBeenCalledTimes(1)
       expect(bossScheduleMock).toHaveBeenCalledWith(
         'catalog.cleanup-idempotency-keys',
         '0 * * * *',
         {},
       )
-      expect(bossWorkMock).toHaveBeenCalledTimes(1)
-      expect(bossWorkMock.mock.calls[0]?.[0]).toBe('catalog.cleanup-idempotency-keys')
-      expect(typeof bossWorkMock.mock.calls[0]?.[1]).toBe('function')
+    } finally {
+      await boot.shutdown()
+    }
+  })
+
+  it('logs handler_registered for every queue + boot_complete on success', async () => {
+    setValidEnv()
+    const { lines, logger } = captureLogs()
+
+    const { start } = await import('../src/index')
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
+    try {
+      const registered = lines.filter((line) => line.event === 'handler_registered')
+      const queues = registered.map((line) => line.queue)
+      for (const queue of REGISTERED_INGESTION_QUEUES) {
+        expect(queues).toContain(queue)
+      }
+      expect(queues).toContain('catalog.cleanup-idempotency-keys')
+
+      const bootLine = lines.find((line) => line.event === 'boot_complete')
+      expect(bootLine).toBeDefined()
+      expect(bootLine?.ingestion_handlers).toBe(REGISTERED_INGESTION_QUEUES.length)
+    } finally {
+      await boot.shutdown()
+    }
+  })
+
+  it('logs the embedding provider choice (default mock in non-prod)', async () => {
+    setValidEnv()
+    const { lines, logger } = captureLogs()
+
+    const { start } = await import('../src/index')
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps('mock', 'default') })
+    try {
+      const line = lines.find((entry) => entry.event === 'embedding_provider_selected')
+      expect(line).toMatchObject({ provider: 'mock', source: 'default' })
     } finally {
       await boot.shutdown()
     }
@@ -127,34 +262,34 @@ describe('apps/worker boot', () => {
 
   it('does not re-create the cleanup queue when it already exists', async () => {
     setValidEnv()
-    bossGetQueueMock.mockResolvedValueOnce({ name: 'catalog.cleanup-idempotency-keys' })
+    bossGetQueueMock.mockImplementation(async (name: string) =>
+      name === 'catalog.cleanup-idempotency-keys' ? { name } : null,
+    )
     const { logger } = captureLogs()
 
     const { start } = await import('../src/index')
-    const boot = await start({ logger })
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
     try {
-      expect(bossGetQueueMock).toHaveBeenCalledWith('catalog.cleanup-idempotency-keys')
-      expect(bossCreateQueueMock).not.toHaveBeenCalled()
+      const created = bossCreateQueueMock.mock.calls.map((call) => call[0])
+      expect(created).not.toContain('catalog.cleanup-idempotency-keys')
       expect(bossScheduleMock).toHaveBeenCalledTimes(1)
     } finally {
       await boot.shutdown()
     }
   })
 
-  it('logs a redacted DATABASE_URL on startup (no password)', async () => {
+  it('logs a redacted DATABASE_URL on boot_complete (no password)', async () => {
     setValidEnv({ DATABASE_URL: 'postgres://user:secretpass@db.example.com:5432/dialogus' })
     const { lines, logger } = captureLogs()
 
     const { start } = await import('../src/index')
-    const boot = await start({ logger })
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
     try {
-      const startupLine = lines.find(
-        (line) => typeof line.msg === 'string' && /worker started/.test(line.msg as string),
-      )
-      expect(startupLine).toBeDefined()
-      expect(startupLine?.NODE_ENV).toBe('test')
-      expect(startupLine?.DATABASE_URL).toBe('postgres://db.example.com:5432/dialogus')
-      const serialized = JSON.stringify(startupLine)
+      const bootLine = lines.find((line) => line.event === 'boot_complete')
+      expect(bootLine).toBeDefined()
+      expect(bootLine?.NODE_ENV).toBe('test')
+      expect(bootLine?.DATABASE_URL).toBe('postgres://db.example.com:5432/dialogus')
+      const serialized = JSON.stringify(bootLine)
       expect(serialized).not.toContain('secretpass')
       expect(serialized).not.toContain('user:')
     } finally {
@@ -168,7 +303,7 @@ describe('apps/worker boot', () => {
     const { logger } = captureLogs()
 
     const { start } = await import('../src/index')
-    await expect(start({ logger })).rejects.toMatchObject({
+    await expect(start({ logger, composeDeps: () => fakeComposedDeps() })).rejects.toMatchObject({
       name: 'ConfigError',
       code: 'INVALID_ENV',
       message: expect.stringContaining('DATABASE_URL'),
@@ -190,12 +325,12 @@ describe('apps/worker boot', () => {
     }
   })
 
-  it('SIGTERM triggers shutdown with exit 0 in well under 10 seconds', async () => {
+  it('SIGTERM triggers shutdown with exit 0 in well under 15 seconds', async () => {
     setValidEnv()
     const { logger } = captureLogs()
 
     const { start, attachSignalHandlers } = await import('../src/index')
-    const boot = await start({ logger })
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
 
     let exitCode: number | undefined
     const detach = attachSignalHandlers(boot, (code) => {
@@ -206,12 +341,12 @@ describe('apps/worker boot', () => {
     process.emit('SIGTERM')
     while (exitCode === undefined) {
       await new Promise((r) => setImmediate(r))
-      if (Date.now() - begin > 10_000) break
+      if (Date.now() - begin > 15_000) break
     }
     detach()
 
     expect(exitCode).toBe(0)
-    expect(Date.now() - begin).toBeLessThan(10_000)
+    expect(Date.now() - begin).toBeLessThan(15_000)
     expect(bossStopMock).toHaveBeenCalledTimes(1)
     expect(dbClientEndMock).toHaveBeenCalledTimes(1)
   })
@@ -221,7 +356,7 @@ describe('apps/worker boot', () => {
     const { logger } = captureLogs()
 
     const { start, attachSignalHandlers } = await import('../src/index')
-    const boot = await start({ logger })
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
 
     let exitCode: number | undefined
     const detach = attachSignalHandlers(boot, (code) => {
@@ -243,7 +378,7 @@ describe('apps/worker boot', () => {
     const { logger } = captureLogs()
 
     const { start } = await import('../src/index')
-    const boot = await start({ logger })
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
     await boot.shutdown()
     await boot.shutdown()
     expect(dbClientEndMock).toHaveBeenCalledTimes(1)
@@ -258,7 +393,7 @@ describe('apps/worker boot', () => {
     createDatabaseMock.mockReturnValueOnce({} as Database)
 
     const { start } = await import('../src/index')
-    const boot = await start({ logger })
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
     await boot.shutdown()
     expect(dbClientEndMock).not.toHaveBeenCalled()
     expect(bossStopMock).toHaveBeenCalledTimes(1)

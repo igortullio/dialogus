@@ -112,6 +112,9 @@ importers:
       '@dialogus/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@dialogus/ingestion':
+        specifier: workspace:*
+        version: link:../../packages/ingestion
       '@dialogus/shared':
         specifier: workspace:*
         version: link:../../packages/shared

@@ -40,6 +40,7 @@ function makeBook(overrides: Partial<BookRecordForStage> = {}): BookRecordForSta
   return {
     id: BOOK_ID,
     gutendexId: GUTENDEX_ID,
+    languages: ['en'],
     ingestionStatus: 'downloading',
     ingestionLastStage: 'download',
     ingestionStartedAt: new Date('2026-04-26T10:00:00Z'),

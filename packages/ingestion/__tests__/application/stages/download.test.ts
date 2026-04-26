@@ -69,6 +69,7 @@ function makeBook(overrides: Partial<BookRecordForStage> = {}): BookRecordForSta
   return {
     id: BOOK_ID,
     gutendexId: GUTENDEX_ID,
+    languages: ['en'],
     ingestionStatus: 'discovered',
     ingestionLastStage: null,
     ingestionStartedAt: null,

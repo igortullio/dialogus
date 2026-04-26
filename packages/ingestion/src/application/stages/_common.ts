@@ -25,6 +25,7 @@ export interface StageDeps {
   readonly chunkRepo: ChunkRepository
   readonly embeddingProvider: EmbeddingProvider
   readonly chapterParser: ChapterParser
+  readonly txtChapterParser: ChapterParser
   readonly downloader: GutendexDownloader
   readonly pgboss: PgBoss
   readonly storageRoot?: string
@@ -61,6 +62,7 @@ export type IngestionErrorSlug = (typeof INGESTION_ERROR_SLUGS)[keyof typeof ING
 export interface BookRecordForStage {
   readonly id: string
   readonly gutendexId: number
+  readonly languages: readonly string[]
   readonly ingestionStatus: IngestionStatus
   readonly ingestionLastStage: string | null
   readonly ingestionStartedAt: Date | null
@@ -82,6 +84,7 @@ export async function findBookForStage(db: Database, bookId: string): Promise<Bo
     columns: {
       id: true,
       gutendexId: true,
+      languages: true,
       ingestionStatus: true,
       ingestionLastStage: true,
       ingestionStartedAt: true,

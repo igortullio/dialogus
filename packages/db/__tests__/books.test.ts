@@ -9,6 +9,13 @@ import { books, INGESTION_STATUS_VALUES } from '../src/schema'
 const here = dirname(fileURLToPath(import.meta.url))
 const migrationPath = resolve(here, '..', 'drizzle', '0001_books.sql')
 const migrationSql = readFileSync(migrationPath, 'utf8')
+const statusExtensionPath = resolve(
+  here,
+  '..',
+  'drizzle',
+  '0004_books_status_cleaning_indexing.sql',
+)
+const statusExtensionSql = readFileSync(statusExtensionPath, 'utf8')
 
 const dialect = new PgDialect()
 const config = getTableConfig(books)
@@ -129,9 +136,11 @@ describe('books table', () => {
     expect(status.enumValues).toEqual([
       'discovered',
       'downloading',
+      'cleaning',
       'parsing',
       'chunking',
       'embedding',
+      'indexing',
       'ready',
       'failed',
     ])
@@ -242,9 +251,17 @@ describe('drizzle/0001_books.sql migration', () => {
     expect(migrationSql).toMatch(/"books_created_at_id_active_idx".*"created_at" DESC.*"id" DESC/s)
   })
 
-  it('emits the CHECK constraint listing every IngestionStatus enum value', () => {
+  it('emits the CHECK constraint listing the seven original IngestionStatus enum values', () => {
     expect(migrationSql).toMatch(/CONSTRAINT "books_ingestion_status_check"/)
-    for (const value of INGESTION_STATUS_VALUES) {
+    for (const value of [
+      'discovered',
+      'downloading',
+      'parsing',
+      'chunking',
+      'embedding',
+      'ready',
+      'failed',
+    ]) {
       expect(migrationSql).toContain(`'${value}'`)
     }
   })
@@ -256,5 +273,22 @@ describe('drizzle/0001_books.sql migration', () => {
   it('declares ingestion_status default as discovered and tags default as []', () => {
     expect(migrationSql).toMatch(/"ingestion_status" text DEFAULT 'discovered' NOT NULL/)
     expect(migrationSql).toMatch(/"tags" jsonb DEFAULT '\[\]'::jsonb NOT NULL/)
+  })
+})
+
+describe('drizzle/0004_books_status_cleaning_indexing.sql migration', () => {
+  it('drops and re-creates the books_ingestion_status_check constraint', () => {
+    expect(statusExtensionSql).toMatch(
+      /ALTER TABLE "books" DROP CONSTRAINT "books_ingestion_status_check"/,
+    )
+    expect(statusExtensionSql).toMatch(
+      /ALTER TABLE "books" ADD CONSTRAINT "books_ingestion_status_check"/,
+    )
+  })
+
+  it('lists every current IngestionStatus enum value in the new CHECK constraint', () => {
+    for (const value of INGESTION_STATUS_VALUES) {
+      expect(statusExtensionSql).toContain(`'${value}'`)
+    }
   })
 })

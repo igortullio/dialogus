@@ -29,6 +29,13 @@
       "when": 1777131410713,
       "tag": "0003_chapters_chunks",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777241180725,
+      "tag": "0004_books_status_cleaning_indexing",
+      "breakpoints": true
     }
   ]
 }

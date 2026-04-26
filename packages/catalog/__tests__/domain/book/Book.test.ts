@@ -20,9 +20,11 @@ describe('Book domain types', () => {
     const seen: IngestionStatus[] = [
       'discovered',
       'downloading',
+      'cleaning',
       'parsing',
       'chunking',
       'embedding',
+      'indexing',
       'ready',
       'failed',
     ]

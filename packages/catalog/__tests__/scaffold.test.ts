@@ -84,9 +84,11 @@ describe('@dialogus/catalog barrel', () => {
     expect(mod.INGESTION_STATUS_VALUES).toEqual([
       'discovered',
       'downloading',
+      'cleaning',
       'parsing',
       'chunking',
       'embedding',
+      'indexing',
       'ready',
       'failed',
     ])

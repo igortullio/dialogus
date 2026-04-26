@@ -29,10 +29,10 @@ describe('@dialogus/ingestion package.json', () => {
     expect(deps?.bottleneck).toBeTypeOf('string')
   })
 
-  it('does not yet pull in adapter libraries reserved for later infrastructure tasks', () => {
+  it('declares the EPUB parser adapter dependencies', () => {
     const deps = (pkg.dependencies ?? {}) as Record<string, string>
-    expect('@gxl/epub-parser' in deps).toBe(false)
-    expect('epub2' in deps).toBe(false)
+    expect(deps['@gxl/epub-parser']).toBeTypeOf('string')
+    expect(deps.epub2).toBeTypeOf('string')
   })
 
   it('exposes typecheck + test scripts', () => {

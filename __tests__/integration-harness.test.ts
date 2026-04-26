@@ -58,9 +58,15 @@ describe('apps/api/vitest.integration.config.ts', () => {
     expect(source).toMatch(/pool:\s*['"`]forks['"`]/)
   })
 
-  it('sets testTimeout and hookTimeout to 30000ms', () => {
-    expect(source).toMatch(/testTimeout:\s*30_?000/)
-    expect(source).toMatch(/hookTimeout:\s*30_?000/)
+  it('sets generous testTimeout and hookTimeout sufficient for full ingestion pipelines', () => {
+    const testTimeoutMatch = source.match(/testTimeout:\s*([0-9_]+)/)
+    const hookTimeoutMatch = source.match(/hookTimeout:\s*([0-9_]+)/)
+    expect(testTimeoutMatch).not.toBeNull()
+    expect(hookTimeoutMatch).not.toBeNull()
+    const testTimeoutMs = Number((testTimeoutMatch?.[1] ?? '0').replace(/_/g, ''))
+    const hookTimeoutMs = Number((hookTimeoutMatch?.[1] ?? '0').replace(/_/g, ''))
+    expect(testTimeoutMs).toBeGreaterThanOrEqual(30_000)
+    expect(hookTimeoutMs).toBeGreaterThanOrEqual(30_000)
   })
 })
 

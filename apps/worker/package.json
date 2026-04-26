@@ -2,6 +2,12 @@
   "name": "@dialogus/worker",
   "private": true,
   "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc --build",

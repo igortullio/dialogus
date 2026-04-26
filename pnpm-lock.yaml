@@ -48,12 +48,18 @@ importers:
         specifier: ^4.0.0
         version: 4.3.6
     devDependencies:
+      '@dialogus/worker':
+        specifier: workspace:*
+        version: link:../worker
       '@testcontainers/postgresql':
         specifier: ^11.0.0
         version: 11.14.0
       '@types/node':
         specifier: ^22.10.5
         version: 22.19.17
+      msw:
+        specifier: ^2.4.9
+        version: 2.13.6(@types/node@22.19.17)(typescript@6.0.3)
       pino-pretty:
         specifier: ^11.0.0
         version: 11.3.0

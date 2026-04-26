@@ -41,6 +41,7 @@ interface MockDbCalls {
     from: ReturnType<typeof vi.fn>
     where: ReturnType<typeof vi.fn>
     orderBy: ReturnType<typeof vi.fn>
+    limit: ReturnType<typeof vi.fn>
   }
   countChain: {
     from: ReturnType<typeof vi.fn>
@@ -57,6 +58,7 @@ interface MockDbCalls {
 
 interface MockDbOptions {
   selectRows?: ChapterRow[]
+  selectBatches?: ChapterRow[][]
   countRow?: { count: number } | undefined
   findFirstResult?: ChapterRow | undefined
 }
@@ -66,11 +68,28 @@ function makeMockDb(opts: MockDbOptions = {}): { db: Database; calls: MockDbCall
     values: vi.fn().mockReturnThis(),
     onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
   }
+  // limit() is awaited - it returns rows. To support multi-batch streaming, queue successive batches.
+  const limitFn = vi.fn()
+  if (opts.selectBatches) {
+    for (const batch of opts.selectBatches) {
+      limitFn.mockResolvedValueOnce(batch)
+    }
+    limitFn.mockResolvedValue([])
+  } else {
+    limitFn.mockResolvedValue(opts.selectRows ?? [])
+  }
   const selectChain = {
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
-    orderBy: vi.fn().mockResolvedValue(opts.selectRows ?? []),
+    // orderBy() returns a thenable that resolves to rows for listByBookId,
+    // and is itself chainable into limit() for the streaming path.
+    orderBy: vi.fn(),
+    limit: limitFn,
   }
+  const orderByResult = Object.assign(Promise.resolve(opts.selectRows ?? []), {
+    limit: limitFn,
+  })
+  selectChain.orderBy.mockReturnValue(orderByResult)
   const countChain = {
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockResolvedValue(opts.countRow ? [opts.countRow] : []),
@@ -133,6 +152,40 @@ describe('DrizzleChapterRepository.listByBookId', () => {
     expect(result).toHaveLength(2)
     expect(result[0]?.ordinal).toBe(1)
     expect(result[1]?.ordinal).toBe(2)
+  })
+})
+
+describe('DrizzleChapterRepository.streamByBookId', () => {
+  it('returns an async iterator (not a plain Array)', () => {
+    const { db } = makeMockDb({ selectBatches: [[]] })
+    const repo = new DrizzleChapterRepository(db)
+    const iter = repo.streamByBookId('b3b9f5e0-7c1f-4a2e-9d3b-22f4c9a1d8b1')
+    expect(Array.isArray(iter)).toBe(false)
+    expect(typeof (iter as AsyncIterable<unknown>)[Symbol.asyncIterator]).toBe('function')
+  })
+
+  it('streams chapters one at a time across keyset-paginated batches', async () => {
+    // Single partial batch terminates the loop after yielding once.
+    const firstBatch = [buildRow({ ordinal: 1 })]
+    const { db, calls } = makeMockDb({ selectBatches: [firstBatch] })
+    const repo = new DrizzleChapterRepository(db)
+    const collected: Chapter[] = []
+    for await (const chapter of repo.streamByBookId('b3b9f5e0-7c1f-4a2e-9d3b-22f4c9a1d8b1')) {
+      collected.push(chapter)
+    }
+    expect(collected).toHaveLength(1)
+    expect(collected[0]?.ordinal).toBe(1)
+    expect(calls.selectChain.limit).toHaveBeenCalled()
+  })
+
+  it('terminates cleanly when the first batch comes back empty', async () => {
+    const { db } = makeMockDb({ selectBatches: [[]] })
+    const repo = new DrizzleChapterRepository(db)
+    const collected: Chapter[] = []
+    for await (const chapter of repo.streamByBookId('book-id')) {
+      collected.push(chapter)
+    }
+    expect(collected).toHaveLength(0)
   })
 })
 

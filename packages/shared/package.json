@@ -14,8 +14,10 @@
     "./http/problem": "./src/http/problem.ts",
     "./types": "./src/types/index.ts",
     "./schemas": "./src/schemas/index.ts",
+    "./schemas/chat": "./src/schemas/chat.ts",
     "./schemas/health": "./src/schemas/health.ts",
-    "./schemas/ingestion": "./src/schemas/ingestion.ts"
+    "./schemas/ingestion": "./src/schemas/ingestion.ts",
+    "./schemas/thread": "./src/schemas/thread.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

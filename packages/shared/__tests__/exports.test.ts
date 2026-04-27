@@ -61,10 +61,26 @@ describe('@dialogus/shared exports map', () => {
     expect(Array.isArray(mod.INGESTION_STAGE_VALUES)).toBe(true)
   })
 
+  it('resolves the ./schemas/chat subpath', async () => {
+    const mod = await import('@dialogus/shared/schemas/chat')
+    expect(mod).toBeTypeOf('object')
+    expect(typeof mod.chatStreamRequestSchema.parse).toBe('function')
+  })
+
+  it('resolves the ./schemas/thread subpath', async () => {
+    const mod = await import('@dialogus/shared/schemas/thread')
+    expect(mod).toBeTypeOf('object')
+    expect(typeof mod.threadMetadataSchema.parse).toBe('function')
+    expect(typeof mod.threadMetadataUpdateSchema.parse).toBe('function')
+  })
+
   it('resolves the ./schemas barrel subpath', async () => {
     const mod = await import('@dialogus/shared/schemas')
     expect(mod).toBeTypeOf('object')
     expect(typeof mod.healthResponseSchema.parse).toBe('function')
     expect(typeof mod.ingestionStatusDtoSchema.parse).toBe('function')
+    expect(typeof mod.chatStreamRequestSchema.parse).toBe('function')
+    expect(typeof mod.threadMetadataSchema.parse).toBe('function')
+    expect(typeof mod.threadMetadataUpdateSchema.parse).toBe('function')
   })
 })

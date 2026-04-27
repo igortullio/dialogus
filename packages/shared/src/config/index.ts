@@ -22,11 +22,13 @@ export const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   API_PORT: z.coerce.number().int().min(0).max(65535).default(3001),
   WEB_PORT: z.coerce.number().int().min(0).max(65535).default(3000),
+  MASTRA_PORT: z.coerce.number().int().min(0).max(65535).default(3002),
+  MASTRA_STUDIO_PORT: z.coerce.number().int().min(0).max(65535).default(4111),
   NEXT_PUBLIC_API_URL: z.string().url().default('http://localhost:3001'),
+  NEXT_PUBLIC_MASTRA_URL: z.string().url().default('http://localhost:3002'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
-  NEXT_PUBLIC_MASTRA_URL: z.string().url().optional(),
 })
 
 export type DialogusEnv = z.infer<typeof envSchema>

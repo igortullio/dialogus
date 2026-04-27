@@ -1,7 +1,7 @@
 import { type HealthResponse, healthResponseSchema } from '@dialogus/shared/schemas/health'
 
 const DEFAULT_BASE_URL = 'http://localhost:3001'
-const FALLBACK: HealthResponse = { api: 'up', db: 'down', pgboss: 'down' }
+const FALLBACK: HealthResponse = { api: 'up', db: 'down', pgboss: 'down', mastra: 'down' }
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const base = process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_BASE_URL

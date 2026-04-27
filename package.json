@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --parallel --filter @dialogus/api --filter @dialogus/worker --filter @dialogus/web dev",
+    "dev": "pnpm --parallel --filter @dialogus/api --filter @dialogus/mastra --filter @dialogus/worker --filter @dialogus/web dev",
     "build": "pnpm -r build",
     "test": "vitest run && pnpm -r test",
     "test:integration": "pnpm -r --filter=@dialogus/api test:integration",

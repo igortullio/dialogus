@@ -28,7 +28,7 @@ const statusStyle: CSSProperties = {
 }
 
 export default async function Page() {
-  const [{ api, db, pgboss }, { total, ready }] = await Promise.all([
+  const [{ api, db, pgboss, mastra }, { total, ready }] = await Promise.all([
     fetchHealth(),
     fetchLibraryCountByStatus(),
   ])
@@ -36,7 +36,8 @@ export default async function Page() {
     <main style={containerStyle}>
       <h1 style={headingStyle}>dIAlogus</h1>
       <p style={statusStyle}>
-        api: {api} / db: {db} / pgboss: {pgboss} / livros: {total} (prontos: {ready})
+        api: {api} / db: {db} / pgboss: {pgboss} / mastra: {mastra} / livros: {total} (prontos:{' '}
+        {ready})
       </p>
     </main>
   )

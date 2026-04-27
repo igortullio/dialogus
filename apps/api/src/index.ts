@@ -61,7 +61,7 @@ export async function start(options: StartOptions = {}): Promise<BootResult> {
   const app = new Hono<{ Variables: BootVariables }>()
   app.use('*', requestId())
   app.use('*', createProblemMiddleware({ logger }))
-  app.route('/health', createHealthRoute({ db }))
+  app.route('/health', createHealthRoute({ db, mastraUrl: config.NEXT_PUBLIC_MASTRA_URL }))
   for (const mount of options.routes ?? []) {
     app.route(mount.prefix, mount.app)
   }

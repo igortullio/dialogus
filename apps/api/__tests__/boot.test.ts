@@ -82,7 +82,7 @@ describe('apps/api boot', () => {
       const res = await fetch(`http://127.0.0.1:${boot.port}/health`)
       expect(res.status).toBe(200)
       expect(res.headers.get('content-type')).toMatch(/application\/json/)
-      expect(await res.json()).toEqual({ api: 'up', db: 'up', pgboss: 'up' })
+      expect(await res.json()).toEqual({ api: 'up', db: 'up', pgboss: 'up', mastra: 'down' })
 
       const startupLine = lines.find(
         (line) => typeof line.msg === 'string' && /api listening on :/.test(line.msg as string),

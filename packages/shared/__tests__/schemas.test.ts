@@ -2,28 +2,41 @@ import { type HealthResponse, healthResponseSchema } from '@dialogus/shared/sche
 import { describe, expect, it } from 'vitest'
 
 describe('healthResponseSchema', () => {
-  it('accepts the canonical up/up/up response', () => {
-    const result = healthResponseSchema.safeParse({ api: 'up', db: 'up', pgboss: 'up' })
+  it('accepts the canonical up/up/up/up response', () => {
+    const result = healthResponseSchema.safeParse({
+      api: 'up',
+      db: 'up',
+      pgboss: 'up',
+      mastra: 'up',
+    })
     expect(result.success).toBe(true)
     if (result.success) {
       const parsed: HealthResponse = result.data
       expect(parsed.api).toBe('up')
       expect(parsed.db).toBe('up')
       expect(parsed.pgboss).toBe('up')
+      expect(parsed.mastra).toBe('up')
     }
   })
 
-  it('accepts every valid combination of up/down for db and pgboss', () => {
+  it('accepts every valid combination of up/down for db, pgboss and mastra', () => {
     for (const db of ['up', 'down'] as const) {
       for (const pgboss of ['up', 'down'] as const) {
-        const result = healthResponseSchema.safeParse({ api: 'up', db, pgboss })
-        expect(result.success).toBe(true)
+        for (const mastra of ['up', 'down'] as const) {
+          const result = healthResponseSchema.safeParse({ api: 'up', db, pgboss, mastra })
+          expect(result.success).toBe(true)
+        }
       }
     }
   })
 
   it('rejects unknown enum values on db with a clear path', () => {
-    const result = healthResponseSchema.safeParse({ api: 'up', db: 'unknown', pgboss: 'up' })
+    const result = healthResponseSchema.safeParse({
+      api: 'up',
+      db: 'unknown',
+      pgboss: 'up',
+      mastra: 'up',
+    })
     expect(result.success).toBe(false)
     if (!result.success) {
       const dbIssue = result.error.issues.find((i) => i.path.join('.') === 'db')
@@ -32,11 +45,30 @@ describe('healthResponseSchema', () => {
   })
 
   it("rejects api values other than the literal 'up'", () => {
-    const result = healthResponseSchema.safeParse({ api: 'down', db: 'up', pgboss: 'up' })
+    const result = healthResponseSchema.safeParse({
+      api: 'down',
+      db: 'up',
+      pgboss: 'up',
+      mastra: 'up',
+    })
     expect(result.success).toBe(false)
     if (!result.success) {
       const apiIssue = result.error.issues.find((i) => i.path.join('.') === 'api')
       expect(apiIssue).toBeDefined()
+    }
+  })
+
+  it('rejects unknown enum values on mastra with a clear path', () => {
+    const result = healthResponseSchema.safeParse({
+      api: 'up',
+      db: 'up',
+      pgboss: 'up',
+      mastra: 'unknown',
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      const mastraIssue = result.error.issues.find((i) => i.path.join('.') === 'mastra')
+      expect(mastraIssue).toBeDefined()
     }
   })
 
@@ -48,6 +80,7 @@ describe('healthResponseSchema', () => {
       expect(fields).toContain('api')
       expect(fields).toContain('db')
       expect(fields).toContain('pgboss')
+      expect(fields).toContain('mastra')
     }
   })
 })

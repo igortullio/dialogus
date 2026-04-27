@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchHealth } from '../../src/lib/health'
 
-const FALLBACK = { api: 'up', db: 'down', pgboss: 'down' } as const
+const FALLBACK = { api: 'up', db: 'down', pgboss: 'down', mastra: 'down' } as const
 const DEFAULT_BASE_URL = 'http://localhost:3001'
 
 const fetchMock = vi.fn<typeof fetch>()
@@ -32,9 +32,16 @@ afterEach(() => {
 
 describe('fetchHealth', () => {
   it('returns the parsed body on a schema-valid 200 response', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ api: 'up', db: 'up', pgboss: 'up' }))
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ api: 'up', db: 'up', pgboss: 'up', mastra: 'up' }),
+    )
 
-    await expect(fetchHealth()).resolves.toEqual({ api: 'up', db: 'up', pgboss: 'up' })
+    await expect(fetchHealth()).resolves.toEqual({
+      api: 'up',
+      db: 'up',
+      pgboss: 'up',
+      mastra: 'up',
+    })
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
@@ -46,7 +53,7 @@ describe('fetchHealth', () => {
 
   it('returns the fallback shape when the response status is non-2xx', async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse({ api: 'up', db: 'up', pgboss: 'up' }, { status: 500 }),
+      jsonResponse({ api: 'up', db: 'up', pgboss: 'up', mastra: 'up' }, { status: 500 }),
     )
 
     await expect(fetchHealth()).resolves.toEqual(FALLBACK)
@@ -59,7 +66,9 @@ describe('fetchHealth', () => {
   })
 
   it('passes cache: "no-store" to fetch on every call', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ api: 'up', db: 'up', pgboss: 'up' }))
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ api: 'up', db: 'up', pgboss: 'up', mastra: 'up' }),
+    )
 
     await fetchHealth()
 
@@ -68,7 +77,9 @@ describe('fetchHealth', () => {
 
   it('falls back to http://localhost:3001 when NEXT_PUBLIC_API_URL is unset', async () => {
     delete process.env.NEXT_PUBLIC_API_URL
-    fetchMock.mockResolvedValueOnce(jsonResponse({ api: 'up', db: 'up', pgboss: 'up' }))
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ api: 'up', db: 'up', pgboss: 'up', mastra: 'up' }),
+    )
 
     await fetchHealth()
 

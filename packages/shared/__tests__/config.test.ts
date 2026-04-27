@@ -9,11 +9,13 @@ const DIALOGUS_KEYS = [
   'DATABASE_URL',
   'API_PORT',
   'WEB_PORT',
+  'MASTRA_PORT',
+  'MASTRA_STUDIO_PORT',
   'NEXT_PUBLIC_API_URL',
+  'NEXT_PUBLIC_MASTRA_URL',
   'LOG_LEVEL',
   'ANTHROPIC_API_KEY',
   'OPENAI_API_KEY',
-  'NEXT_PUBLIC_MASTRA_URL',
 ] as const
 
 function clearedEnv(): NodeJS.ProcessEnv {
@@ -40,7 +42,18 @@ describe('envSchema', () => {
     expect(parsed.LOG_LEVEL).toBe('info')
     expect(parsed.API_PORT).toBe(3001)
     expect(parsed.WEB_PORT).toBe(3000)
+    expect(parsed.MASTRA_PORT).toBe(3002)
+    expect(parsed.MASTRA_STUDIO_PORT).toBe(4111)
     expect(parsed.NEXT_PUBLIC_API_URL).toBe('http://localhost:3001')
+    expect(parsed.NEXT_PUBLIC_MASTRA_URL).toBe('http://localhost:3002')
+  })
+
+  it('accepts MASTRA_PORT=3002 explicitly', () => {
+    const parsed = envSchema.parse({
+      DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus',
+      MASTRA_PORT: '3002',
+    })
+    expect(parsed.MASTRA_PORT).toBe(3002)
   })
 })
 
@@ -61,7 +74,10 @@ describe('loadConfig', () => {
     expect(cfg.LOG_LEVEL).toBe('info')
     expect(cfg.API_PORT).toBe(3001)
     expect(cfg.WEB_PORT).toBe(3000)
+    expect(cfg.MASTRA_PORT).toBe(3002)
+    expect(cfg.MASTRA_STUDIO_PORT).toBe(4111)
     expect(cfg.NEXT_PUBLIC_API_URL).toBe('http://localhost:3001')
+    expect(cfg.NEXT_PUBLIC_MASTRA_URL).toBe('http://localhost:3002')
   })
 
   it('coerces numeric port strings from process.env', () => {
@@ -69,10 +85,14 @@ describe('loadConfig', () => {
       DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus',
       API_PORT: '4000',
       WEB_PORT: '4100',
+      MASTRA_PORT: '4200',
+      MASTRA_STUDIO_PORT: '4300',
     })
     const cfg = loadConfig()
     expect(cfg.API_PORT).toBe(4000)
     expect(cfg.WEB_PORT).toBe(4100)
+    expect(cfg.MASTRA_PORT).toBe(4200)
+    expect(cfg.MASTRA_STUDIO_PORT).toBe(4300)
   })
 
   it('defaults NEXT_PUBLIC_API_URL to http://localhost:3001 when absent', () => {
@@ -81,12 +101,31 @@ describe('loadConfig', () => {
     expect(cfg.NEXT_PUBLIC_API_URL).toBe('http://localhost:3001')
   })
 
-  it('accepts optional future keys without requiring them', () => {
+  it('defaults NEXT_PUBLIC_MASTRA_URL to http://localhost:3002 when absent', () => {
+    withEnv({ DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus' })
+    const cfg = loadConfig()
+    expect(cfg.NEXT_PUBLIC_MASTRA_URL).toBe('http://localhost:3002')
+  })
+
+  it('rejects malformed MASTRA_PORT values', () => {
+    withEnv({
+      DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus',
+      MASTRA_PORT: 'abc',
+    })
+    try {
+      loadConfig()
+      expect.fail('expected loadConfig to throw')
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConfigError)
+      expect((err as Error).message).toContain('MASTRA_PORT')
+    }
+  })
+
+  it('accepts optional API keys without requiring them', () => {
     withEnv({ DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus' })
     const cfg = loadConfig()
     expect(cfg.ANTHROPIC_API_KEY).toBeUndefined()
     expect(cfg.OPENAI_API_KEY).toBeUndefined()
-    expect(cfg.NEXT_PUBLIC_MASTRA_URL).toBeUndefined()
   })
 
   it('throws ConfigError naming DATABASE_URL when it is missing', () => {

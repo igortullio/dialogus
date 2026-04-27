@@ -27,3 +27,4 @@ export type {
   ParsedChapter,
   SupportedLanguage,
 } from './domain/parser/ChapterParser.port'
+export { DrizzleChapterSummaryRepository } from './infrastructure/persistence/DrizzleChapterSummaryRepository'

@@ -84,8 +84,9 @@ describe('@dialogus/ingestion barrel', () => {
     expect(typeof mod.IndexError).toBe('function')
   })
 
-  it('does not re-export anything from infrastructure/ (constraint is permanent)', () => {
+  it('limits infrastructure re-exports to the DrizzleChapterSummaryRepository (ADR-006 carve-out)', () => {
     const indexSource = readPackageFile('src/index.ts')
-    expect(indexSource).not.toMatch(/['"][^'"]*infrastructure[^'"]*['"]/)
+    const matches = indexSource.match(/['"][^'"]*infrastructure[^'"]*['"]/g) ?? []
+    expect(matches).toEqual([`'./infrastructure/persistence/DrizzleChapterSummaryRepository'`])
   })
 })

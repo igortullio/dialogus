@@ -13,7 +13,8 @@
     "start": "mastra start",
     "build": "mastra build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@dialogus/db": "workspace:*",
@@ -29,7 +30,9 @@
     "pino-pretty": "^11.0.0"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "^11.0.0",
     "@types/node": "^22.10.5",
+    "msw": "^2.4.9",
     "tsx": "^4.19.0",
     "typescript": "^6.0.0",
     "vitest": "^4.0.0"

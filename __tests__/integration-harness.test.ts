@@ -23,13 +23,22 @@ describe('root package.json test:integration script', () => {
 
   it('delegates to apps/api workspace via pnpm filter', () => {
     expect(scripts['test:integration']).toMatch(
-      /pnpm\s+-r\s+--filter=@?dialogus\/api\s+test:integration/,
+      /pnpm\s+-r\s+(?:--filter=@?dialogus\/[a-z]+\s+)*--filter=@?dialogus\/api(?:\s+--filter=@?dialogus\/[a-z]+)*\s+test:integration/,
+    )
+  })
+
+  it('delegates to apps/mastra workspace via pnpm filter', () => {
+    expect(scripts['test:integration']).toMatch(
+      /pnpm\s+-r\s+(?:--filter=@?dialogus\/[a-z]+\s+)*--filter=@?dialogus\/mastra(?:\s+--filter=@?dialogus\/[a-z]+)*\s+test:integration/,
     )
   })
 })
 
-describe('apps/api package.json test:integration script', () => {
-  const pkg = readJson('apps/api/package.json')
+describe.each([
+  { app: 'api', path: 'apps/api' },
+  { app: 'mastra', path: 'apps/mastra' },
+])('$path package.json test:integration script', ({ path }) => {
+  const pkg = readJson(`${path}/package.json`)
   const scripts = pkg.scripts as Record<string, string>
 
   it('exposes a test:integration script', () => {
@@ -41,9 +50,10 @@ describe('apps/api package.json test:integration script', () => {
   })
 })
 
-describe('apps/api/vitest.integration.config.ts', () => {
-  const path = 'apps/api/vitest.integration.config.ts'
-
+describe.each([
+  { path: 'apps/api/vitest.integration.config.ts' },
+  { path: 'apps/mastra/vitest.integration.config.ts' },
+])('$path', ({ path }) => {
   it('exists', () => {
     expect(existsSync(join(repoRoot, path))).toBe(true)
   })

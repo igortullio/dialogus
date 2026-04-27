@@ -6,7 +6,7 @@
     "dev": "pnpm --parallel --filter @dialogus/api --filter @dialogus/mastra --filter @dialogus/worker --filter @dialogus/web dev",
     "build": "pnpm -r build",
     "test": "vitest run && pnpm -r test",
-    "test:integration": "pnpm -r --filter=@dialogus/api test:integration",
+    "test:integration": "pnpm -r --filter=@dialogus/api --filter=@dialogus/mastra test:integration",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "typecheck": "pnpm -r typecheck",

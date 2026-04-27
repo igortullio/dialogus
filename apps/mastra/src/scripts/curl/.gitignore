@@ -1,0 +1,3 @@
+# Smoke-script working directory: thread ids, captured SSE payloads, env files.
+# Each script writes here under SCRIPT_DIR/tmp via _lib.sh.
+tmp/

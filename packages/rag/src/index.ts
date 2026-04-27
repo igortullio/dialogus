@@ -1,4 +1,18 @@
 export {
+  FIND_CHARACTER_MENTIONS_DEFAULT_LIMIT,
+  FIND_CHARACTER_MENTIONS_MAX_LIMIT,
+  FIND_CHARACTER_MENTIONS_TOOL_DESCRIPTION,
+  FIND_CHARACTER_MENTIONS_TOOL_ID,
+  type FindCharacterMentionsInput,
+  type FindCharacterMentionsItem,
+  type FindCharacterMentionsLogger,
+  type FindCharacterMentionsOutput,
+  type FindCharacterMentionsToolDeps,
+  findCharacterMentionsInputSchema,
+  findCharacterMentionsOutputSchema,
+  findCharacterMentionsTool,
+} from './application/tools/findCharacterMentions'
+export {
   chapterSummaryDtoSchema,
   GET_CHAPTER_SUMMARY_TOOL_DESCRIPTION,
   GET_CHAPTER_SUMMARY_TOOL_ID,

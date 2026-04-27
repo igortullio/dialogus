@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import { fetchHealth } from '../lib/health'
+import { fetchLibraryCountByStatus } from '../lib/library'
 
 const containerStyle: CSSProperties = {
   minHeight: '100vh',
@@ -27,12 +28,15 @@ const statusStyle: CSSProperties = {
 }
 
 export default async function Page() {
-  const { api, db, pgboss } = await fetchHealth()
+  const [{ api, db, pgboss }, { total, ready }] = await Promise.all([
+    fetchHealth(),
+    fetchLibraryCountByStatus(),
+  ])
   return (
     <main style={containerStyle}>
       <h1 style={headingStyle}>dIAlogus</h1>
       <p style={statusStyle}>
-        api: {api} / db: {db} / pgboss: {pgboss}
+        api: {api} / db: {db} / pgboss: {pgboss} / livros: {total} (prontos: {ready})
       </p>
     </main>
   )

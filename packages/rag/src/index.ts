@@ -77,3 +77,4 @@ export {
   OpenAIQueryEmbedder,
   type OpenAIQueryEmbedderOptions,
 } from './infrastructure/embedding/OpenAIQueryEmbedder'
+export { loadSystemPrompt } from './prompts/loader'

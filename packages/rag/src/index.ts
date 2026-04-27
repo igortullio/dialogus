@@ -1,4 +1,29 @@
 export {
+  chapterSummaryDtoSchema,
+  GET_CHAPTER_SUMMARY_TOOL_DESCRIPTION,
+  GET_CHAPTER_SUMMARY_TOOL_ID,
+  type GetChapterSummaryInput,
+  type GetChapterSummaryLogger,
+  type GetChapterSummaryOutput,
+  type GetChapterSummaryToolDeps,
+  getChapterSummaryInputSchema,
+  getChapterSummaryOutputSchema,
+  getChapterSummaryTool,
+} from './application/tools/getChapterSummary'
+export {
+  chapterListItemSchema,
+  LIST_CHAPTERS_TOOL_DESCRIPTION,
+  LIST_CHAPTERS_TOOL_ID,
+  type ListChaptersInput,
+  type ListChaptersItem,
+  type ListChaptersLogger,
+  type ListChaptersOutput,
+  type ListChaptersToolDeps,
+  listChaptersInputSchema,
+  listChaptersOutputSchema,
+  listChaptersTool,
+} from './application/tools/listChapters'
+export {
   chunkWithContextSchema,
   SEMANTIC_SEARCH_DEFAULT_K,
   SEMANTIC_SEARCH_EXCERPT_PREVIEW_MAX_LENGTH,

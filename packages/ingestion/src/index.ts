@@ -1,5 +1,11 @@
 export type { Chapter } from './domain/chapter/Chapter'
 export type { ChapterRepository } from './domain/chapter/ChapterRepository.port'
+export type { ChapterSummary } from './domain/chapter_summary/ChapterSummary'
+export type {
+  ChapterSummaryGeneration,
+  ChapterSummaryGenerator,
+} from './domain/chapter_summary/ChapterSummaryGenerator.port'
+export type { ChapterSummaryRepository } from './domain/chapter_summary/ChapterSummaryRepository.port'
 export type { Chunk } from './domain/chunk/Chunk'
 export type {
   ChunkEmbeddingUpdate,
@@ -14,6 +20,7 @@ export {
   IndexError,
   type IngestionErrorOptions,
   ParseError,
+  SummarizeError,
 } from './domain/ingestion/IngestionError'
 export type {
   ChapterParser,

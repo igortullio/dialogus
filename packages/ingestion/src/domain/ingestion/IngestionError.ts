@@ -43,6 +43,12 @@ export class ChunkError extends IngestionStageError {
   }
 }
 
+export class SummarizeError extends IngestionStageError {
+  constructor(message: string, options?: IngestionErrorOptions) {
+    super('INGESTION_SUMMARIZE_FAILED', message, true, options)
+  }
+}
+
 export class EmbedError extends IngestionStageError {
   constructor(message: string, options?: IngestionErrorOptions) {
     super('INGESTION_EMBED_FAILED', message, true, options)

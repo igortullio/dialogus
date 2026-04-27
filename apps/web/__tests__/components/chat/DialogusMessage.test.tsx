@@ -25,7 +25,7 @@ describe('DialogusMessage', () => {
     renderMessage({ messageId: 'm-1', text: 'Olá, mundo.', status: 'complete' })
     const root = screen.getByText('Olá, mundo.')
     expect(root).toBeDefined()
-    expect(document.querySelectorAll('[data-slot="citation-badge-placeholder"]').length).toBe(0)
+    expect(document.querySelectorAll('[data-slot="citation-badge"]').length).toBe(0)
   })
 
   it('renders text + citation badge for a single marker', () => {
@@ -34,7 +34,7 @@ describe('DialogusMessage', () => {
       text: `Brás Cubas começa pelo fim {{cite:${UUID_1}}}.`,
       status: 'complete',
     })
-    const badges = Array.from(document.querySelectorAll('[data-slot="citation-badge-placeholder"]'))
+    const badges = Array.from(document.querySelectorAll('[data-slot="citation-badge"]'))
     expect(badges.length).toBe(1)
     const [first] = badges
     expect(first?.getAttribute('data-chunk-id')).toBe(UUID_1)
@@ -47,7 +47,7 @@ describe('DialogusMessage', () => {
       text: `a {{cite:${UUID_1}}} b {{cite:${UUID_2}}} c {{cite:${UUID_3}}} d`,
       status: 'complete',
     })
-    const badges = Array.from(document.querySelectorAll('[data-slot="citation-badge-placeholder"]'))
+    const badges = Array.from(document.querySelectorAll('[data-slot="citation-badge"]'))
     expect(badges.map((el) => el.getAttribute('data-citation-index'))).toEqual(['1', '2', '3'])
     expect(badges.map((el) => el.getAttribute('data-chunk-id'))).toEqual([UUID_1, UUID_2, UUID_3])
   })
@@ -58,7 +58,7 @@ describe('DialogusMessage', () => {
       text: `first {{cite:${UUID_1}}} second {{cite:${UUID_2}}}`,
       status: 'complete',
     })
-    const badges = document.querySelectorAll('[data-slot="citation-badge-placeholder"]')
+    const badges = document.querySelectorAll('[data-slot="citation-badge"]')
     expect(badges.length).toBe(2)
 
     rerender(
@@ -66,9 +66,7 @@ describe('DialogusMessage', () => {
         <DialogusMessage messageId="m-5" text={`x {{cite:${UUID_3}}}`} status="complete" />
       </QueryWrapper>,
     )
-    const badgesAfter = Array.from(
-      document.querySelectorAll('[data-slot="citation-badge-placeholder"]'),
-    )
+    const badgesAfter = Array.from(document.querySelectorAll('[data-slot="citation-badge"]'))
     expect(badgesAfter.length).toBe(1)
     const [only] = badgesAfter
     expect(only?.getAttribute('data-citation-index')).toBe('1')
@@ -83,7 +81,7 @@ describe('DialogusMessage', () => {
     })
     expect(screen.getByText(/antes/)).toBeDefined()
     expect(document.body.textContent).toContain('{{cite:not-a-uuid}}')
-    expect(document.querySelectorAll('[data-slot="citation-badge-placeholder"]').length).toBe(0)
+    expect(document.querySelectorAll('[data-slot="citation-badge"]').length).toBe(0)
   })
 
   it('flushes a dangling marker_pending as unresolved', () => {
@@ -93,7 +91,7 @@ describe('DialogusMessage', () => {
       status: 'incomplete',
     })
     expect(document.body.textContent).toContain(`{{cite:${UUID_1}`)
-    expect(document.querySelectorAll('[data-slot="citation-badge-placeholder"]').length).toBe(0)
+    expect(document.querySelectorAll('[data-slot="citation-badge"]').length).toBe(0)
   })
 
   it('exposes role + status as data attributes', () => {

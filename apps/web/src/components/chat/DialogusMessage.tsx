@@ -1,9 +1,9 @@
 'use client'
 
 import { Fragment, useMemo } from 'react'
+import { CitationBadge } from '@/components/citation/CitationBadge'
 import { initialParserState, parseStream, type Token } from '@/lib/citation-parser'
 import { cn } from '@/lib/utils'
-import { CitationBadgePlaceholder } from './CitationBadgePlaceholder'
 import { usePrefetchCitations } from './usePrefetchCitations'
 
 export type DialogusMessageStatus = 'streaming' | 'complete' | 'incomplete'
@@ -11,6 +11,7 @@ export type DialogusMessageStatus = 'streaming' | 'complete' | 'incomplete'
 export interface DialogusMessageProps {
   readonly messageId: string
   readonly text: string
+  readonly threadId?: string
   readonly status?: DialogusMessageStatus
   readonly className?: string
   readonly role?: 'user' | 'assistant' | 'system'
@@ -37,6 +38,7 @@ function parseFullMessage(text: string): ParsedMessage {
 export function DialogusMessage({
   messageId,
   text,
+  threadId = '',
   status = 'complete',
   className,
   role = 'assistant',
@@ -60,9 +62,20 @@ export function DialogusMessage({
     if (token.kind === 'citation') {
       citationIndex += 1
       return (
-        <CitationBadgePlaceholder key={`c-${idx}`} chunkId={token.chunkId} index={citationIndex} />
+        <CitationBadge
+          key={`c-${idx}`}
+          chunkId={token.chunkId}
+          index={citationIndex}
+          threadId={threadId}
+          messageId={messageId}
+        />
       )
     }
+    // Parser-level "unresolved" tokens are malformed citation markers (e.g.,
+    // a non-UUID body or a 60-char buffer bailout). They render as the raw
+    // source text so the user can see the unparsed marker. This is distinct
+    // from <UnresolvedCitationBadge>, which task_11 will mount when a valid
+    // UUID marker is not in the message's tool_outputs.
     return <Fragment key={`u-${idx}`}>{token.rawText}</Fragment>
   })
 

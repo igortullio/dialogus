@@ -1,0 +1,31 @@
+{
+  "name": "@dialogus/rag",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3",
+    "@ai-sdk/openai": "^3",
+    "@dialogus/db": "workspace:*",
+    "@dialogus/ingestion": "workspace:*",
+    "@dialogus/shared": "workspace:*",
+    "@mastra/core": "1.28.0",
+    "@mastra/memory": "1.17.1",
+    "js-tiktoken": "^1",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^6.0.0",
+    "vitest": "^4.0.0"
+  }
+}

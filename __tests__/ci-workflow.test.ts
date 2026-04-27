@@ -19,6 +19,7 @@ type Job = {
   services?: Record<string, unknown>
   steps?: Step[]
   'timeout-minutes'?: number
+  env?: Record<string, string | number>
 }
 
 type Workflow = {
@@ -82,6 +83,14 @@ describe('.github/workflows/ci.yml', () => {
     expect(timeout).toBeLessThanOrEqual(15)
     const runs = (job?.steps ?? []).map((s) => s.run ?? '')
     expect(runs).toContain('pnpm test:integration')
+  })
+
+  it('integration job pins fixture env vars for @dialogus/mastra suites (MSW + MockQueryEmbedder mock externals)', () => {
+    const env = workflow.jobs?.integration?.env ?? {}
+    expect(env.ANTHROPIC_API_KEY).toBe('test-anthropic-key')
+    expect(env.OPENAI_API_KEY).toBe('test-openai-key')
+    expect(String(env.MASTRA_PORT)).toBe('3002')
+    expect(env.NEXT_PUBLIC_MASTRA_URL).toBe('http://localhost:3002')
   })
 
   it('every job runs on ubuntu-latest', () => {

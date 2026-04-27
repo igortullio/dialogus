@@ -46,6 +46,15 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Fixture env vars for the @dialogus/mastra integration suites. MSW intercepts
+    # every Anthropic call and MockQueryEmbedder short-circuits OpenAI, so these
+    # MUST stay as fixture strings — never replace with real GitHub Actions
+    # secrets. DATABASE_URL is set per-test by Testcontainers.
+    env:
+      ANTHROPIC_API_KEY: test-anthropic-key
+      OPENAI_API_KEY: test-openai-key
+      MASTRA_PORT: '3002'
+      NEXT_PUBLIC_MASTRA_URL: http://localhost:3002
     steps:
       - uses: actions/checkout@v4
       - name: Enable Corepack

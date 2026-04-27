@@ -47,6 +47,7 @@
       "!**/node_modules",
       "!**/dist",
       "!**/build",
+      "!**/.mastra",
       "!**/coverage",
       "!**/.next",
       "!**/next-env.d.ts",

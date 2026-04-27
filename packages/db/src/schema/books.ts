@@ -7,6 +7,7 @@ export const INGESTION_STATUS_VALUES = [
   'cleaning',
   'parsing',
   'chunking',
+  'summarizing',
   'embedding',
   'indexing',
   'ready',
@@ -56,7 +57,7 @@ export const books = pgTable(
       .where(sql`${table.deletedAt} IS NULL`),
     check(
       'books_ingestion_status_check',
-      sql`${table.ingestionStatus} IN ('discovered', 'downloading', 'cleaning', 'parsing', 'chunking', 'embedding', 'indexing', 'ready', 'failed')`,
+      sql`${table.ingestionStatus} IN ('discovered', 'downloading', 'cleaning', 'parsing', 'chunking', 'summarizing', 'embedding', 'indexing', 'ready', 'failed')`,
     ),
     check('books_ingestion_progress_check', sql`${table.ingestionProgress} BETWEEN 0 AND 100`),
   ],

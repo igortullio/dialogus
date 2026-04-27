@@ -317,13 +317,14 @@ describe('INGESTION_PROBLEM_SLUGS registry', () => {
       'book-already-ready': 409,
       'ingestion-download-failed': 503,
       'ingestion-parse-failed': 422,
+      'ingestion-summarize-failed': 503,
       'ingestion-embed-failed': 503,
       'chunk-not-found': 404,
     })
   })
 
-  it('exposes exactly seven new slugs (the task_01 inventory)', () => {
-    expect(Object.keys(INGESTION_PROBLEM_SLUGS)).toHaveLength(7)
+  it('exposes exactly eight slugs (task_01 inventory + ADR-008 summarize)', () => {
+    expect(Object.keys(INGESTION_PROBLEM_SLUGS)).toHaveLength(8)
   })
 })
 
@@ -342,6 +343,7 @@ describe('problem middleware ingestion error dispatch', () => {
     { code: 'BOOK_ALREADY_READY', slug: 'book-already-ready', retryAfter: false },
     { code: 'INGESTION_DOWNLOAD_FAILED', slug: 'ingestion-download-failed', retryAfter: true },
     { code: 'INGESTION_PARSE_FAILED', slug: 'ingestion-parse-failed', retryAfter: false },
+    { code: 'INGESTION_SUMMARIZE_FAILED', slug: 'ingestion-summarize-failed', retryAfter: true },
     { code: 'INGESTION_EMBED_FAILED', slug: 'ingestion-embed-failed', retryAfter: true },
     { code: 'CHUNK_NOT_FOUND', slug: 'chunk-not-found', retryAfter: false },
   ]

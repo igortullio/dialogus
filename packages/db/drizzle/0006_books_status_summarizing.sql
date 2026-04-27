@@ -1,0 +1,2 @@
+ALTER TABLE "books" DROP CONSTRAINT "books_ingestion_status_check";--> statement-breakpoint
+ALTER TABLE "books" ADD CONSTRAINT "books_ingestion_status_check" CHECK ("books"."ingestion_status" IN ('discovered', 'downloading', 'cleaning', 'parsing', 'chunking', 'summarizing', 'embedding', 'indexing', 'ready', 'failed'));

@@ -16,6 +16,8 @@ const statusExtensionPath = resolve(
   '0004_books_status_cleaning_indexing.sql',
 )
 const statusExtensionSql = readFileSync(statusExtensionPath, 'utf8')
+const summarizingExtensionPath = resolve(here, '..', 'drizzle', '0006_books_status_summarizing.sql')
+const summarizingExtensionSql = readFileSync(summarizingExtensionPath, 'utf8')
 
 const dialect = new PgDialect()
 const config = getTableConfig(books)
@@ -139,6 +141,7 @@ describe('books table', () => {
       'cleaning',
       'parsing',
       'chunking',
+      'summarizing',
       'embedding',
       'indexing',
       'ready',
@@ -285,10 +288,25 @@ describe('drizzle/0004_books_status_cleaning_indexing.sql migration', () => {
       /ALTER TABLE "books" ADD CONSTRAINT "books_ingestion_status_check"/,
     )
   })
+})
+
+describe('drizzle/0006_books_status_summarizing.sql migration', () => {
+  it('drops and re-creates the books_ingestion_status_check constraint', () => {
+    expect(summarizingExtensionSql).toMatch(
+      /ALTER TABLE "books" DROP CONSTRAINT "books_ingestion_status_check"/,
+    )
+    expect(summarizingExtensionSql).toMatch(
+      /ALTER TABLE "books" ADD CONSTRAINT "books_ingestion_status_check"/,
+    )
+  })
 
   it('lists every current IngestionStatus enum value in the new CHECK constraint', () => {
     for (const value of INGESTION_STATUS_VALUES) {
-      expect(statusExtensionSql).toContain(`'${value}'`)
+      expect(summarizingExtensionSql).toContain(`'${value}'`)
     }
+  })
+
+  it('adds the summarizing status to the constraint', () => {
+    expect(summarizingExtensionSql).toContain(`'summarizing'`)
   })
 })

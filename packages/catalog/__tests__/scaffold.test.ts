@@ -87,6 +87,7 @@ describe('@dialogus/catalog barrel', () => {
       'cleaning',
       'parsing',
       'chunking',
+      'summarizing',
       'embedding',
       'indexing',
       'ready',

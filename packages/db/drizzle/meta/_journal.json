@@ -43,6 +43,13 @@
       "when": 1777267310644,
       "tag": "0005_chapter_summaries",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777270182866,
+      "tag": "0006_books_status_summarizing",
+      "breakpoints": true
     }
   ]
 }

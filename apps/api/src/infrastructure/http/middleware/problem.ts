@@ -24,6 +24,7 @@ export const INGESTION_PROBLEM_SLUGS = {
   'book-already-ready': 409,
   'ingestion-download-failed': 503,
   'ingestion-parse-failed': 422,
+  'ingestion-summarize-failed': 503,
   'ingestion-embed-failed': 503,
   'chunk-not-found': 404,
 } as const satisfies Record<string, number>
@@ -32,6 +33,7 @@ export type IngestionProblemSlug = keyof typeof INGESTION_PROBLEM_SLUGS
 
 const INGESTION_PROBLEM_SLUGS_WITH_RETRY_AFTER: ReadonlySet<IngestionProblemSlug> = new Set([
   'ingestion-download-failed',
+  'ingestion-summarize-failed',
   'ingestion-embed-failed',
 ])
 
@@ -41,6 +43,7 @@ const INGESTION_ERROR_CODE_TO_SLUG: Readonly<Record<string, IngestionProblemSlug
   BOOK_ALREADY_READY: 'book-already-ready',
   INGESTION_DOWNLOAD_FAILED: 'ingestion-download-failed',
   INGESTION_PARSE_FAILED: 'ingestion-parse-failed',
+  INGESTION_SUMMARIZE_FAILED: 'ingestion-summarize-failed',
   INGESTION_EMBED_FAILED: 'ingestion-embed-failed',
   CHUNK_NOT_FOUND: 'chunk-not-found',
 }

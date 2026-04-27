@@ -23,6 +23,7 @@ describe('Book domain types', () => {
       'cleaning',
       'parsing',
       'chunking',
+      'summarizing',
       'embedding',
       'indexing',
       'ready',

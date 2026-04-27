@@ -4,6 +4,7 @@ export const INGESTION_STATUS_VALUES = [
   'cleaning',
   'parsing',
   'chunking',
+  'summarizing',
   'embedding',
   'indexing',
   'ready',

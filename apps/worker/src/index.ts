@@ -21,6 +21,7 @@ import {
   CLEANUP_IDEMPOTENCY_KEYS_JOB,
   createCleanupIdempotencyKeysHandler,
 } from './handlers/catalog-cleanup-idempotency-keys'
+import { createSummarizeHandler, SUMMARIZE_QUEUE } from './handlers/ingestion-summarize'
 
 const SHUTDOWN_TIMEOUT_MS = 15_000
 const INGESTION_WORK_OPTIONS: WorkOptions = { batchSize: 1 }
@@ -39,6 +40,8 @@ const INGESTION_STAGE_HANDLERS: readonly IngestionStageRegistration[] = [
   { stage: 'embed', queue: INGESTION_QUEUES.embed, handler: embedStage },
   { stage: 'index', queue: INGESTION_QUEUES.index, handler: indexStage },
 ]
+
+const TOTAL_INGESTION_STAGE_REGISTRATIONS = INGESTION_STAGE_HANDLERS.length + 1
 
 export interface StartOptions {
   logger?: Logger
@@ -132,6 +135,30 @@ async function registerIngestionHandlers(
       'ingestion handler registered',
     )
   }
+
+  await boss.work(
+    SUMMARIZE_QUEUE,
+    INGESTION_WORK_OPTIONS,
+    createSummarizeHandler({
+      logger,
+      deps: {
+        db: composed.deps.db,
+        pgboss: boss,
+        chapterRepo: composed.deps.chapterRepo,
+        chapterSummaryRepo: composed.chapterSummaryRepo,
+        chapterSummaryGenerator: composed.chapterSummaryGenerator,
+      },
+    }),
+  )
+  logger.info(
+    {
+      event: 'handler_registered',
+      queue: SUMMARIZE_QUEUE,
+      stage: 'summarize',
+      batch_size: INGESTION_WORK_OPTIONS.batchSize,
+    },
+    'ingestion handler registered',
+  )
 }
 
 export async function start(options: StartOptions = {}): Promise<BootResult> {
@@ -153,6 +180,15 @@ export async function start(options: StartOptions = {}): Promise<BootResult> {
     },
     'embedding provider selected',
   )
+  logger.info(
+    {
+      event: 'summary_generator_selected',
+      generator: composed.summaryGenerator.choice,
+      source: composed.summaryGenerator.source,
+      model_name: composed.summaryGenerator.modelName,
+    },
+    'summary generator selected',
+  )
 
   await registerCleanupIdempotencyKeys(boss, db, logger)
   await registerIngestionHandlers(boss, composed, logger)
@@ -162,7 +198,7 @@ export async function start(options: StartOptions = {}): Promise<BootResult> {
       event: 'boot_complete',
       NODE_ENV: config.NODE_ENV,
       DATABASE_URL: redactDatabaseUrl(config.DATABASE_URL),
-      ingestion_handlers: INGESTION_STAGE_HANDLERS.length,
+      ingestion_handlers: TOTAL_INGESTION_STAGE_REGISTRATIONS,
     },
     'worker started',
   )

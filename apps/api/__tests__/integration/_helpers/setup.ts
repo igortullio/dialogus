@@ -1,10 +1,11 @@
 import { spawnSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createDatabase, createPgBoss, type Database, type PgBoss } from '@dialogus/db'
+import { createDatabase, createPgBoss, type Database } from '@dialogus/db'
 import { books } from '@dialogus/db/schema'
-import type { EmbeddingProvider } from '@dialogus/ingestion'
+import type { ChapterSummaryGenerator, EmbeddingProvider } from '@dialogus/ingestion'
 import type { StageDeps } from '@dialogus/ingestion/application/stages/_common'
+import { MockChapterSummaryGenerator } from '@dialogus/ingestion/infrastructure/external/MockChapterSummaryGenerator'
 import { MockEmbeddingProvider } from '@dialogus/ingestion/infrastructure/external/MockEmbeddingProvider'
 import {
   attachSignalHandlers,
@@ -136,6 +137,7 @@ export interface StartWorkerOptions {
   readonly storageRoot: string
   readonly logger: Logger
   readonly embeddingProvider?: EmbeddingProvider
+  readonly chapterSummaryGenerator?: ChapterSummaryGenerator
 }
 
 const ORIGINAL_ENV: NodeJS.ProcessEnv = { ...process.env }
@@ -148,6 +150,8 @@ export function applyTestEnv(databaseUrl: string): void {
   process.env.WEB_PORT = '0'
   delete process.env.EMBEDDING_PROVIDER
   delete process.env.OPENAI_API_KEY
+  delete process.env.SUMMARY_GENERATOR
+  delete process.env.ANTHROPIC_API_KEY
 }
 
 export function restoreEnv(): void {
@@ -157,9 +161,11 @@ export function restoreEnv(): void {
 export async function startTestWorker(options: StartWorkerOptions): Promise<StartedWorker> {
   applyTestEnv(options.databaseUrl)
   const provider = options.embeddingProvider ?? new MockEmbeddingProvider()
+  const summaryGenerator = options.chapterSummaryGenerator ?? new MockChapterSummaryGenerator()
   const composeDeps: WorkerStartOptions['composeDeps'] = (input) => {
     const composed = composeStageDeps({ ...input, storageRoot: options.storageRoot })
     const overridden: ComposedStageDeps = {
+      ...composed,
       deps: {
         ...(composed.deps as StageDeps),
         embeddingProvider: provider,
@@ -169,11 +175,17 @@ export async function startTestWorker(options: StartWorkerOptions): Promise<Star
         choice: 'mock',
         source: 'default',
       },
+      chapterSummaryGenerator: summaryGenerator,
+      summaryGenerator: {
+        generator: summaryGenerator,
+        choice: 'mock',
+        source: 'default',
+        modelName: 'mock-summary-generator',
+      },
     }
     return overridden
   }
   const boot = await startWorker({ logger: options.logger, composeDeps })
-  await registerSummarizeBridge(boot.boss)
   let exited = false
   const detachSignals = attachSignalHandlers(boot, () => {
     exited = true
@@ -187,24 +199,6 @@ export async function startTestWorker(options: StartWorkerOptions): Promise<Star
 export async function stopTestWorker(worker: StartedWorker): Promise<void> {
   worker.detachSignals()
   await worker.boot.shutdown()
-}
-
-/**
- * Bridges `ingestion.summarize` jobs to `ingestion.embed`.
- * The summarize stage handler lands in tasks 19-24 (ADR-008); until then, integration
- * suites that exercise the full pipeline must forward the queued payload so chunks
- * actually reach the embed stage.
- */
-async function registerSummarizeBridge(boss: PgBoss): Promise<void> {
-  await boss.work(
-    'ingestion.summarize',
-    { batchSize: 1 },
-    async (jobs: Array<{ data: { bookId: string } }>) => {
-      for (const job of jobs) {
-        await boss.send('ingestion.embed', job.data)
-      }
-    },
-  )
 }
 
 export interface DirectEnqueueDeps {

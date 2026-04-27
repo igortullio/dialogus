@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   composeStageDeps,
   EmbeddingProviderConfigError,
+  SummaryGeneratorConfigError,
   selectEmbeddingProvider,
+  selectSummaryGenerator,
 } from '../src/deps'
 
 const ORIGINAL_ENV = { ...process.env }
@@ -13,6 +15,8 @@ const ORIGINAL_ENV = { ...process.env }
 beforeEach(() => {
   delete process.env.EMBEDDING_PROVIDER
   delete process.env.OPENAI_API_KEY
+  delete process.env.SUMMARY_GENERATOR
+  delete process.env.ANTHROPIC_API_KEY
 })
 
 afterEach(() => {
@@ -110,6 +114,77 @@ describe('selectEmbeddingProvider', () => {
   })
 })
 
+describe('selectSummaryGenerator', () => {
+  it('returns mock with source=env when SUMMARY_GENERATOR=mock', () => {
+    const result = selectSummaryGenerator({
+      nodeEnv: 'production',
+      anthropicApiKey: 'sk-ant',
+      summaryGeneratorEnv: 'mock',
+    })
+    expect(result.choice).toBe('mock')
+    expect(result.source).toBe('env')
+    expect(result.modelName).toBe('mock-summary-generator')
+  })
+
+  it('returns anthropic with source=env when SUMMARY_GENERATOR=anthropic', () => {
+    const result = selectSummaryGenerator({
+      nodeEnv: 'development',
+      anthropicApiKey: 'sk-ant-test',
+      summaryGeneratorEnv: 'anthropic',
+    })
+    expect(result.choice).toBe('anthropic')
+    expect(result.source).toBe('env')
+    expect(result.modelName).toBe('claude-haiku-4-5')
+  })
+
+  it('defaults to mock when env unset and NODE_ENV !== production', () => {
+    const result = selectSummaryGenerator({
+      nodeEnv: 'development',
+      anthropicApiKey: undefined,
+      summaryGeneratorEnv: undefined,
+    })
+    expect(result.choice).toBe('mock')
+    expect(result.source).toBe('default')
+  })
+
+  it('defaults to anthropic when env unset and NODE_ENV === production', () => {
+    const result = selectSummaryGenerator({
+      nodeEnv: 'production',
+      anthropicApiKey: 'sk-ant-prod',
+      summaryGeneratorEnv: undefined,
+    })
+    expect(result.choice).toBe('anthropic')
+    expect(result.source).toBe('default')
+  })
+
+  it('throws when anthropic is selected but ANTHROPIC_API_KEY is missing', () => {
+    expect(() =>
+      selectSummaryGenerator({
+        nodeEnv: 'production',
+        anthropicApiKey: undefined,
+        summaryGeneratorEnv: undefined,
+      }),
+    ).toThrow(SummaryGeneratorConfigError)
+    expect(() =>
+      selectSummaryGenerator({
+        nodeEnv: 'development',
+        anthropicApiKey: '',
+        summaryGeneratorEnv: 'anthropic',
+      }),
+    ).toThrow(/ANTHROPIC_API_KEY/)
+  })
+
+  it('throws on an unrecognised SUMMARY_GENERATOR value', () => {
+    expect(() =>
+      selectSummaryGenerator({
+        nodeEnv: 'development',
+        anthropicApiKey: 'sk-ant',
+        summaryGeneratorEnv: 'gemini',
+      }),
+    ).toThrow(/SUMMARY_GENERATOR/)
+  })
+})
+
 describe('composeStageDeps', () => {
   function makeConfig(overrides: Partial<DialogusEnv> = {}): DialogusEnv {
     return {
@@ -151,6 +226,10 @@ describe('composeStageDeps', () => {
     expect(composed.deps.embeddingProvider.modelName).toBe('mock-embedding-1536')
     expect(composed.deps.storageRoot).toBe('./storage')
     expect(composed.deps.pgboss).toBe(composed.deps.pgboss)
+    expect(composed.chapterSummaryRepo).toBeDefined()
+    expect(composed.chapterSummaryGenerator).toBeDefined()
+    expect(composed.summaryGenerator.choice).toBe('mock')
+    expect(composed.summaryGenerator.modelName).toBe('mock-summary-generator')
   })
 
   it('honors EMBEDDING_PROVIDER=openai with OPENAI_API_KEY from config', () => {

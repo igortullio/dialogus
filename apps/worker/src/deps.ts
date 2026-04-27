@@ -1,10 +1,16 @@
 import type { Database, PgBoss } from '@dialogus/db'
-import type { EmbeddingProvider } from '@dialogus/ingestion'
+import type {
+  ChapterSummaryGenerator,
+  ChapterSummaryRepository,
+  EmbeddingProvider,
+} from '@dialogus/ingestion'
 import {
   DEFAULT_STORAGE_ROOT,
   type StageDeps,
 } from '@dialogus/ingestion/application/stages/_common'
+import { AnthropicChapterSummaryGenerator } from '@dialogus/ingestion/infrastructure/external/AnthropicChapterSummaryGenerator'
 import { GutendexDownloader } from '@dialogus/ingestion/infrastructure/external/GutendexDownloader'
+import { MockChapterSummaryGenerator } from '@dialogus/ingestion/infrastructure/external/MockChapterSummaryGenerator'
 import { MockEmbeddingProvider } from '@dialogus/ingestion/infrastructure/external/MockEmbeddingProvider'
 import { OpenAIEmbeddingProvider } from '@dialogus/ingestion/infrastructure/external/OpenAIEmbeddingProvider'
 import { EpubChapterParser } from '@dialogus/ingestion/infrastructure/parsing/EpubChapterParser'
@@ -12,6 +18,7 @@ import { EpubChapterParserEpub2 } from '@dialogus/ingestion/infrastructure/parsi
 import { EpubChapterParserWithFallback } from '@dialogus/ingestion/infrastructure/parsing/EpubChapterParserWithFallback'
 import { TxtChapterParser } from '@dialogus/ingestion/infrastructure/parsing/TxtChapterParser'
 import { DrizzleChapterRepository } from '@dialogus/ingestion/infrastructure/persistence/DrizzleChapterRepository'
+import { DrizzleChapterSummaryRepository } from '@dialogus/ingestion/infrastructure/persistence/DrizzleChapterSummaryRepository'
 import { DrizzleChunkRepository } from '@dialogus/ingestion/infrastructure/persistence/DrizzleChunkRepository'
 import type { DialogusEnv } from '@dialogus/shared/config'
 import type { Logger } from 'pino'
@@ -70,6 +77,63 @@ function normalizeProviderEnv(value: string | undefined): EmbeddingProviderChoic
   )
 }
 
+export type SummaryGeneratorChoice = 'mock' | 'anthropic'
+export type SummaryGeneratorSource = 'env' | 'default'
+
+export interface SelectedSummaryGenerator {
+  readonly generator: ChapterSummaryGenerator
+  readonly choice: SummaryGeneratorChoice
+  readonly source: SummaryGeneratorSource
+  readonly modelName: string
+}
+
+export interface SelectSummaryGeneratorInput {
+  readonly nodeEnv: DialogusEnv['NODE_ENV']
+  readonly anthropicApiKey: string | undefined
+  readonly summaryGeneratorEnv: string | undefined
+}
+
+export class SummaryGeneratorConfigError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SummaryGeneratorConfigError'
+  }
+}
+
+export function selectSummaryGenerator(
+  input: SelectSummaryGeneratorInput,
+): SelectedSummaryGenerator {
+  const explicit = normalizeSummaryEnv(input.summaryGeneratorEnv)
+  const choice: SummaryGeneratorChoice =
+    explicit ?? (input.nodeEnv === 'production' ? 'anthropic' : 'mock')
+  const source: SummaryGeneratorSource = explicit ? 'env' : 'default'
+  if (choice === 'anthropic') {
+    if (!input.anthropicApiKey || input.anthropicApiKey.length === 0) {
+      throw new SummaryGeneratorConfigError(
+        'ANTHROPIC_API_KEY is required when SUMMARY_GENERATOR=anthropic (or NODE_ENV=production)',
+      )
+    }
+    const generator = new AnthropicChapterSummaryGenerator({ apiKey: input.anthropicApiKey })
+    return { generator, choice, source, modelName: 'claude-haiku-4-5' }
+  }
+  return {
+    generator: new MockChapterSummaryGenerator(),
+    choice,
+    source,
+    modelName: 'mock-summary-generator',
+  }
+}
+
+function normalizeSummaryEnv(value: string | undefined): SummaryGeneratorChoice | null {
+  if (value === undefined) return null
+  const trimmed = value.trim().toLowerCase()
+  if (trimmed === '') return null
+  if (trimmed === 'mock' || trimmed === 'anthropic') return trimmed
+  throw new SummaryGeneratorConfigError(
+    `SUMMARY_GENERATOR must be "mock" or "anthropic" (got "${value}")`,
+  )
+}
+
 export interface ComposeStageDepsInput {
   readonly db: Database
   readonly boss: PgBoss
@@ -80,7 +144,10 @@ export interface ComposeStageDepsInput {
 
 export interface ComposedStageDeps {
   readonly deps: StageDeps
+  readonly chapterSummaryRepo: ChapterSummaryRepository
+  readonly chapterSummaryGenerator: ChapterSummaryGenerator
   readonly embeddingProvider: SelectedEmbeddingProvider
+  readonly summaryGenerator: SelectedSummaryGenerator
 }
 
 export function composeStageDeps(input: ComposeStageDepsInput): ComposedStageDeps {
@@ -90,9 +157,15 @@ export function composeStageDeps(input: ComposeStageDepsInput): ComposedStageDep
     openaiApiKey: input.config.OPENAI_API_KEY,
     embeddingProviderEnv: process.env.EMBEDDING_PROVIDER,
   })
+  const summaryGenerator = selectSummaryGenerator({
+    nodeEnv: input.config.NODE_ENV,
+    anthropicApiKey: input.config.ANTHROPIC_API_KEY,
+    summaryGeneratorEnv: process.env.SUMMARY_GENERATOR,
+  })
 
   const chapterRepo = new DrizzleChapterRepository(input.db)
   const chunkRepo = new DrizzleChunkRepository(input.db)
+  const chapterSummaryRepo = new DrizzleChapterSummaryRepository(input.db)
   const downloader = new GutendexDownloader({ storageDir: `${storageRoot}/raw` })
   const chapterParser = new EpubChapterParserWithFallback({
     primary: new EpubChapterParser(),
@@ -113,5 +186,11 @@ export function composeStageDeps(input: ComposeStageDepsInput): ComposedStageDep
     pgboss: input.boss,
     storageRoot,
   }
-  return { deps, embeddingProvider }
+  return {
+    deps,
+    chapterSummaryRepo,
+    chapterSummaryGenerator: summaryGenerator.generator,
+    embeddingProvider,
+    summaryGenerator,
+  }
 }

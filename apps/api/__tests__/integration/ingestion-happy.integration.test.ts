@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { books, chapters, chunks } from '@dialogus/db/schema'
+import { books, chapterSummaries, chapters, chunks } from '@dialogus/db/schema'
 import { eq, isNull, sql } from 'drizzle-orm'
 import { HttpResponse, http } from 'msw'
 import { type SetupServer, setupServer } from 'msw/node'
@@ -27,7 +27,7 @@ const FIXTURE_EPUB_PATH = new URL(
 const GUTENDEX_ID = 100015
 const EPUB_URL = `https://aleph.gutenberg.org/cache/epub/${GUTENDEX_ID}/pg${GUTENDEX_ID}.epub.noimages`
 
-describe.skipIf(!dockerAvailable)('ingestion happy path — full 6-stage pipeline', () => {
+describe.skipIf(!dockerAvailable)('ingestion happy path — full 7-stage pipeline', () => {
   let pg: PostgresContext
   let worker: StartedWorker
   let server: SetupServer
@@ -64,7 +64,7 @@ describe.skipIf(!dockerAvailable)('ingestion happy path — full 6-stage pipelin
     if (pg) await stopPostgres(pg)
   })
 
-  it('runs download → clean → parse → chunk → (summarize-bridge) → embed → index to ready', async () => {
+  it('runs download → clean → parse → chunk → summarize → embed → index to ready', async () => {
     const bookId = await insertDiscoveredBook(pg.db, {
       gutendexId: GUTENDEX_ID,
       title: 'Moby-Dick (excerpt)',
@@ -85,6 +85,16 @@ describe.skipIf(!dockerAvailable)('ingestion happy path — full 6-stage pipelin
 
     const chapterRows = await pg.db.select().from(chapters).where(eq(chapters.bookId, bookId))
     expect(chapterRows.length).toBeGreaterThan(0)
+
+    const summaryRows = await pg.db
+      .select()
+      .from(chapterSummaries)
+      .where(eq(chapterSummaries.bookId, bookId))
+    expect(summaryRows.length).toBe(chapterRows.length)
+    for (const row of summaryRows) {
+      expect(row.summary.length).toBeGreaterThan(0)
+      expect(row.model).toBe('mock-summary-generator')
+    }
 
     const chunkRows = await pg.db.select().from(chunks).where(eq(chunks.bookId, bookId))
     expect(chunkRows.length).toBeGreaterThan(0)

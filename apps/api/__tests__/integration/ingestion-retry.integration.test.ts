@@ -2,10 +2,14 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Database } from '@dialogus/db'
-import { books, chunks } from '@dialogus/db/schema'
-import type { EmbeddingProvider } from '@dialogus/ingestion'
-import { EmbedError } from '@dialogus/ingestion/domain/ingestion/IngestionError'
-import { MockEmbeddingProvider } from '@dialogus/ingestion/infrastructure/external/MockEmbeddingProvider'
+import { books, chapterSummaries, chunks } from '@dialogus/db/schema'
+import type { ChapterSummaryGeneration, ChapterSummaryGenerator } from '@dialogus/ingestion'
+import { SummarizeError } from '@dialogus/ingestion/domain/ingestion/IngestionError'
+import type {
+  ParsedChapter,
+  SupportedLanguage,
+} from '@dialogus/ingestion/domain/parser/ChapterParser.port'
+import { MockChapterSummaryGenerator } from '@dialogus/ingestion/infrastructure/external/MockChapterSummaryGenerator'
 import { eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { HttpResponse, http } from 'msw'
@@ -33,42 +37,44 @@ import { generateLargeBook } from './fixtures/generate-large-book'
 const GUTENDEX_ID = 200042
 const TXT_URL = `https://aleph.gutenberg.org/cache/epub/${GUTENDEX_ID}/pg${GUTENDEX_ID}.txt.utf8`
 
-class FailOnceEmbeddingProvider implements EmbeddingProvider {
-  readonly dimensions = 1536 as const
-  readonly modelName = 'mock-fail-once-1536'
-  readonly callBatchSizes: number[] = []
+class FailOnceSummaryGenerator implements ChapterSummaryGenerator {
+  readonly callOrdinals: number[] = []
   hasFailed = false
-  private readonly delegate = new MockEmbeddingProvider()
+  private readonly delegate = new MockChapterSummaryGenerator()
+  constructor(private readonly failOnOrdinal: number) {}
 
-  async embed(texts: readonly string[]): Promise<number[][]> {
-    this.callBatchSizes.push(texts.length)
-    if (!this.hasFailed && this.callBatchSizes.length === 2) {
+  async generate(
+    chapter: ParsedChapter,
+    language: SupportedLanguage,
+  ): Promise<ChapterSummaryGeneration> {
+    this.callOrdinals.push(chapter.ordinal)
+    if (!this.hasFailed && chapter.ordinal === this.failOnOrdinal) {
       this.hasFailed = true
-      throw new EmbedError('Simulated transient embed failure', { retryable: true })
+      throw new SummarizeError('Simulated transient summarize failure', { retryable: true })
     }
-    return this.delegate.embed(texts)
+    return this.delegate.generate(chapter, language)
   }
 }
 
-describe.skipIf(!dockerAvailable)('ingestion retry — recover from mid-embed failure', () => {
+describe.skipIf(!dockerAvailable)('ingestion retry — recover from mid-summarize failure', () => {
   let pg: PostgresContext
   let worker: StartedWorker
   let server: SetupServer
   let storageRoot: string
   let downloadCount: number
-  let provider: FailOnceEmbeddingProvider
+  let generator: FailOnceSummaryGenerator
   let httpApp: Hono<{ Variables: ProblemVariables }>
 
   beforeAll(async () => {
     pg = await startPostgres()
     storageRoot = await mkdtemp(join(tmpdir(), 'ingestion-retry-'))
-    provider = new FailOnceEmbeddingProvider()
+    generator = new FailOnceSummaryGenerator(3)
 
     const fixture = generateLargeBook({
-      approximateWordCount: 130_000,
-      chapterCount: 2,
-      seed: 42,
-      wordsPerParagraph: 40,
+      approximateWordCount: 25_000,
+      chapterCount: 5,
+      seed: 17,
+      wordsPerParagraph: 30,
     })
 
     downloadCount = 0
@@ -86,7 +92,7 @@ describe.skipIf(!dockerAvailable)('ingestion retry — recover from mid-embed fa
       databaseUrl: pg.databaseUrl,
       storageRoot,
       logger: pino({ level: 'silent' }),
-      embeddingProvider: provider,
+      chapterSummaryGenerator: generator,
     })
 
     const logger = pino({ level: 'silent' })
@@ -101,7 +107,7 @@ describe.skipIf(!dockerAvailable)('ingestion retry — recover from mid-embed fa
       }),
     )
 
-    expect(fixture.byteLength).toBeGreaterThan(50_000)
+    expect(fixture.byteLength).toBeGreaterThan(10_000)
   }, 240_000)
 
   afterAll(async () => {
@@ -111,7 +117,7 @@ describe.skipIf(!dockerAvailable)('ingestion retry — recover from mid-embed fa
     if (pg) await stopPostgres(pg)
   })
 
-  it('fails mid-embed, then retries to ready without re-downloading or re-embedding', async () => {
+  it('fails mid-summarize, then retries to ready without re-downloading or re-summarizing', async () => {
     const bookId = await insertDiscoveredBook(pg.db, {
       gutendexId: GUTENDEX_ID,
       title: 'Synthetic Retry Book',
@@ -125,29 +131,27 @@ describe.skipIf(!dockerAvailable)('ingestion retry — recover from mid-embed fa
 
     const failed = await pg.db.query.books.findFirst({ where: eq(books.id, bookId) })
     expect(failed?.ingestionStatus).toBe('failed')
-    expect(failed?.ingestionLastStage).toBe('embed')
-    expect(failed?.ingestionError ?? '').toMatch(/^ingestion-embed-failed:/)
+    expect(failed?.ingestionLastStage).toBe('summarize')
+    expect(failed?.ingestionError ?? '').toMatch(/^ingestion-summarize-failed:/)
 
-    const totalChunks = await countChunks(pg.db, bookId)
-    expect(totalChunks).toBeGreaterThan(100)
+    const summariesBeforeRetry = await countSummaries(pg.db, bookId)
+    expect(summariesBeforeRetry).toBe(2)
 
-    const embeddedAfterFail = await countEmbedded(pg.db, bookId)
-    const pendingAfterFail = totalChunks - embeddedAfterFail
-    expect(embeddedAfterFail).toBe(100)
-    expect(pendingAfterFail).toBeGreaterThan(0)
+    const callOrdinalsBeforeRetry = [...generator.callOrdinals]
+    expect(callOrdinalsBeforeRetry).toEqual([1, 2, 3])
 
-    const callsBeforeRetry = provider.callBatchSizes.length
-    expect(callsBeforeRetry).toBe(2)
+    const embeddedBeforeRetry = await countEmbedded(pg.db, bookId)
+    expect(embeddedBeforeRetry).toBe(0)
 
     const retryResponse = await httpApp.request(
       new Request(`http://local/api/library/books/${bookId}/ingest/retry`, {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'retry-1' },
+        headers: { 'Idempotency-Key': 'retry-summarize-1' },
       }),
     )
     expect(retryResponse.status).toBe(202)
     const retryBody = (await retryResponse.json()) as { data: { stage: string; job_id: string } }
-    expect(retryBody.data.stage).toBe('embed')
+    expect(retryBody.data.stage).toBe('summarize')
     expect(retryBody.data.job_id).toBeTruthy()
 
     await waitForBookStatus(pg.db, bookId, 'ready', 90_000, { allowFailed: true })
@@ -156,17 +160,18 @@ describe.skipIf(!dockerAvailable)('ingestion retry — recover from mid-embed fa
     expect(ready?.ingestionStatus).toBe('ready')
     expect(ready?.ingestionProgress).toBe(100)
 
+    const summariesAfterReady = await countSummaries(pg.db, bookId)
+    expect(summariesAfterReady).toBe(5)
+
+    const totalChunks = await countChunks(pg.db, bookId)
+    expect(totalChunks).toBeGreaterThan(0)
     const embeddedAfterReady = await countEmbedded(pg.db, bookId)
     expect(embeddedAfterReady).toBe(totalChunks)
 
     expect(downloadCount).toBe(1)
 
-    const retryCalls = provider.callBatchSizes.slice(callsBeforeRetry)
-    const retryEmbeddedTexts = retryCalls.reduce((sum, n) => sum + n, 0)
-    expect(retryEmbeddedTexts).toBe(pendingAfterFail)
-    for (const size of retryCalls) {
-      expect(size).toBeLessThanOrEqual(100)
-    }
+    const retryCallOrdinals = generator.callOrdinals.slice(callOrdinalsBeforeRetry.length)
+    expect(retryCallOrdinals).toEqual([3, 4, 5])
   })
 })
 
@@ -183,5 +188,13 @@ async function countEmbedded(db: Database, bookId: string): Promise<number> {
     .select({ count: sql<number>`count(*)::int` })
     .from(chunks)
     .where(sql`${chunks.bookId} = ${bookId} AND ${chunks.embedding} IS NOT NULL`)
+  return row?.count ?? 0
+}
+
+async function countSummaries(db: Database, bookId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(chapterSummaries)
+    .where(eq(chapterSummaries.bookId, bookId))
   return row?.count ?? 0
 }

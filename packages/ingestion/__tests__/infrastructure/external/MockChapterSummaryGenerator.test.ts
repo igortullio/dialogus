@@ -30,10 +30,19 @@ describe('MockChapterSummaryGenerator', () => {
     expect(MOCK_SUMMARY_GENERATOR_MODEL).toBe('mock-summary-generator')
   })
 
-  it('produces a deterministic summary derived from the chapter title and tokenCount', async () => {
+  it('produces a deterministic summary derived from the chapter title, language, and tokenCount', async () => {
     const generator = new MockChapterSummaryGenerator()
     const result = await generator.generate(makeChapter(), 'en')
-    expect(result.summary).toBe('Summary of Loomings. [1234 tokens in source]')
+    expect(result.summary).toBe('Summary of Loomings [lang=en]. [1234 tokens in source]')
+  })
+
+  it('embeds the requested language in the deterministic summary', async () => {
+    const generator = new MockChapterSummaryGenerator()
+    const en = await generator.generate(makeChapter({ title: 'Loomings' }), 'en')
+    const pt = await generator.generate(makeChapter({ title: 'Loomings' }), 'pt')
+    expect(en.summary).toContain('[lang=en]')
+    expect(pt.summary).toContain('[lang=pt]')
+    expect(en.summary).not.toBe(pt.summary)
   })
 
   it('returns identical results on repeated calls with the same chapter (deterministic)', async () => {

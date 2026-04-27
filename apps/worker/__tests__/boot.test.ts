@@ -39,14 +39,7 @@ const ALL_INGESTION_QUEUES = [
   'ingestion.index',
 ] as const
 
-const REGISTERED_INGESTION_QUEUES = [
-  'ingestion.download',
-  'ingestion.clean',
-  'ingestion.parse',
-  'ingestion.chunk',
-  'ingestion.embed',
-  'ingestion.index',
-] as const
+const REGISTERED_INGESTION_QUEUES = ALL_INGESTION_QUEUES
 
 function setValidEnv(overrides: Record<string, string> = {}): void {
   process.env.NODE_ENV = 'test'
@@ -55,6 +48,8 @@ function setValidEnv(overrides: Record<string, string> = {}): void {
   process.env.LOG_LEVEL = 'info'
   delete process.env.EMBEDDING_PROVIDER
   delete process.env.OPENAI_API_KEY
+  delete process.env.SUMMARY_GENERATOR
+  delete process.env.ANTHROPIC_API_KEY
   for (const [k, v] of Object.entries(overrides)) {
     process.env[k] = v
   }
@@ -87,8 +82,19 @@ function fakeComposedDeps(
   choice: 'mock' | 'openai' = 'mock',
   source: 'env' | 'default' = 'default',
 ): ComposedStageDeps {
+  const stubGenerator = {
+    generate: async () => ({
+      summary: 'stub',
+      tokenCount: 1,
+      model: 'mock-summary-generator',
+    }),
+  } as unknown as ComposedStageDeps['chapterSummaryGenerator']
   return {
-    deps: {} as unknown as ComposedStageDeps['deps'],
+    deps: {
+      chapterRepo: {} as unknown as ComposedStageDeps['deps']['chapterRepo'],
+    } as unknown as ComposedStageDeps['deps'],
+    chapterSummaryRepo: {} as unknown as ComposedStageDeps['chapterSummaryRepo'],
+    chapterSummaryGenerator: stubGenerator,
     embeddingProvider: {
       provider: {
         dimensions: 1536,
@@ -97,6 +103,12 @@ function fakeComposedDeps(
       } as unknown as ComposedStageDeps['embeddingProvider']['provider'],
       choice,
       source,
+    },
+    summaryGenerator: {
+      generator: stubGenerator,
+      choice: 'mock',
+      source: 'default',
+      modelName: 'mock-summary-generator',
     },
   }
 }
@@ -164,21 +176,20 @@ describe('apps/worker boot', () => {
     }
   })
 
-  it('registers exactly 7 work handlers (6 ingestion + 1 catalog cleanup)', async () => {
+  it('registers exactly 8 work handlers (7 ingestion + 1 catalog cleanup)', async () => {
     setValidEnv()
     const { logger } = captureLogs()
 
     const { start } = await import('../src/index')
     const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
     try {
-      expect(bossWorkMock).toHaveBeenCalledTimes(7)
+      expect(bossWorkMock).toHaveBeenCalledTimes(8)
       const queueArgs = bossWorkMock.mock.calls.map((call) => call[0])
       for (const queue of REGISTERED_INGESTION_QUEUES) {
         expect(queueArgs).toContain(queue)
       }
       expect(queueArgs).toContain('catalog.cleanup-idempotency-keys')
-      // Summarize is intentionally NOT registered until task_24 (ADR-008).
-      expect(queueArgs).not.toContain('ingestion.summarize')
+      expect(queueArgs).toContain('ingestion.summarize')
     } finally {
       await boot.shutdown()
     }
@@ -255,6 +266,24 @@ describe('apps/worker boot', () => {
     try {
       const line = lines.find((entry) => entry.event === 'embedding_provider_selected')
       expect(line).toMatchObject({ provider: 'mock', source: 'default' })
+    } finally {
+      await boot.shutdown()
+    }
+  })
+
+  it('logs the summary generator choice (default mock in non-prod)', async () => {
+    setValidEnv()
+    const { lines, logger } = captureLogs()
+
+    const { start } = await import('../src/index')
+    const boot = await start({ logger, composeDeps: () => fakeComposedDeps() })
+    try {
+      const line = lines.find((entry) => entry.event === 'summary_generator_selected')
+      expect(line).toMatchObject({
+        generator: 'mock',
+        source: 'default',
+        model_name: 'mock-summary-generator',
+      })
     } finally {
       await boot.shutdown()
     }

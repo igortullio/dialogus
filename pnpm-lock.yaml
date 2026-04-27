@@ -297,6 +297,9 @@ importers:
       '@types/node':
         specifier: ^22.10.5
         version: 22.19.17
+      msw:
+        specifier: ^2.4.9
+        version: 2.13.6(@types/node@22.19.17)(typescript@6.0.3)
       typescript:
         specifier: ^6.0.0
         version: 6.0.3

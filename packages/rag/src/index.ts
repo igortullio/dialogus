@@ -15,3 +15,10 @@ export type {
   SearchSemanticParams,
 } from './domain/ports/ChunkReadRepository.port'
 export type { QueryEmbedder } from './domain/ports/QueryEmbedder.port'
+export { MockQueryEmbedder } from './infrastructure/embedding/MockQueryEmbedder'
+export {
+  OPENAI_QUERY_EMBEDDING_DIMENSIONS,
+  OPENAI_QUERY_EMBEDDING_MODEL,
+  OpenAIQueryEmbedder,
+  type OpenAIQueryEmbedderOptions,
+} from './infrastructure/embedding/OpenAIQueryEmbedder'

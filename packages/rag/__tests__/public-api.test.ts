@@ -68,8 +68,7 @@ describe('@dialogus/rag domain folder layout', () => {
     expect(existsSync(join(packageRoot, folder))).toBe(true)
   })
 
-  it('has no infrastructure imports yet', () => {
-    expect(existsSync(join(packageRoot, 'src/infrastructure'))).toBe(false)
+  it('has no application layer yet', () => {
     expect(existsSync(join(packageRoot, 'src/application'))).toBe(false)
   })
 })
@@ -107,9 +106,8 @@ describe('@dialogus/rag barrel', () => {
     expect(mod.CITATION_MARKER_REGEX.test('{{cite:short}}')).toBe(false)
   })
 
-  it('only re-exports domain symbols (no infrastructure)', () => {
+  it('does not re-export application-layer or third-party agent symbols yet', () => {
     const indexSource = readPackageFile('src/index.ts')
-    expect(indexSource).not.toMatch(/infrastructure/)
     expect(indexSource).not.toMatch(/application/)
     expect(indexSource).not.toMatch(/@mastra/)
     expect(indexSource).not.toMatch(/@ai-sdk/)

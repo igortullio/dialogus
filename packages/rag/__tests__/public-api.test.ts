@@ -62,14 +62,11 @@ describe('@dialogus/rag domain folder layout', () => {
     'src/domain/entities',
     'src/domain/errors',
     'src/domain/constants',
+    'src/application/tools',
   ]
 
   it.each(folders)('exists: %s', (folder) => {
     expect(existsSync(join(packageRoot, folder))).toBe(true)
-  })
-
-  it('has no application layer yet', () => {
-    expect(existsSync(join(packageRoot, 'src/application'))).toBe(false)
   })
 })
 
@@ -106,9 +103,8 @@ describe('@dialogus/rag barrel', () => {
     expect(mod.CITATION_MARKER_REGEX.test('{{cite:short}}')).toBe(false)
   })
 
-  it('does not re-export application-layer or third-party agent symbols yet', () => {
+  it('keeps third-party agent SDKs out of the barrel surface', () => {
     const indexSource = readPackageFile('src/index.ts')
-    expect(indexSource).not.toMatch(/application/)
     expect(indexSource).not.toMatch(/@mastra/)
     expect(indexSource).not.toMatch(/@ai-sdk/)
   })

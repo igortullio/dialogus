@@ -1,3 +1,19 @@
+export {
+  chunkWithContextSchema,
+  SEMANTIC_SEARCH_DEFAULT_K,
+  SEMANTIC_SEARCH_EXCERPT_PREVIEW_MAX_LENGTH,
+  SEMANTIC_SEARCH_MAX_K,
+  SEMANTIC_SEARCH_TOOL_DESCRIPTION,
+  SEMANTIC_SEARCH_TOOL_ID,
+  type SemanticSearchChunk,
+  type SemanticSearchInput,
+  type SemanticSearchLogger,
+  type SemanticSearchOutput,
+  type SemanticSearchToolDeps,
+  semanticSearchInputSchema,
+  semanticSearchOutputSchema,
+  semanticSearchTool,
+} from './application/tools/semanticSearch'
 export { CITATION_MARKER_REGEX } from './domain/constants/citation'
 export type { ChapterSummaryView } from './domain/entities/ChapterSummaryView'
 export type { ChapterView } from './domain/entities/ChapterView'

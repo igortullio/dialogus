@@ -36,6 +36,13 @@
       "when": 1777241180725,
       "tag": "0004_books_status_cleaning_indexing",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777267310644,
+      "tag": "0005_chapter_summaries",
+      "breakpoints": true
     }
   ]
 }

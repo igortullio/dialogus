@@ -1,4 +1,12 @@
 export {
+  type AgentDeps,
+  createDialogusAgent,
+  DIALOGUS_AGENT_ID,
+  DIALOGUS_AGENT_NAME,
+  type DialogusAgentLogger,
+  type DialogusAgentModelId,
+} from './application/createDialogusAgent'
+export {
   FIND_CHARACTER_MENTIONS_DEFAULT_LIMIT,
   FIND_CHARACTER_MENTIONS_MAX_LIMIT,
   FIND_CHARACTER_MENTIONS_TOOL_DESCRIPTION,

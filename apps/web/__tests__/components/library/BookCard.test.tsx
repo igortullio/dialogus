@@ -100,8 +100,10 @@ describe('BookCard', () => {
         <BookCard book={book} />
       </Wrap>,
     )
-    expect(screen.getByText('Memórias Póstumas')).toBeDefined()
-    expect(screen.getByText('Alexandre Dumas')).toBeDefined()
+    const heading = document.querySelector('[data-slot="book-card-title"]') as HTMLElement
+    expect(heading.textContent).toBe('Memórias Póstumas')
+    const authors = document.querySelector('[data-slot="book-card-authors"]') as HTMLElement
+    expect(authors.textContent).toContain('Alexandre Dumas')
     const lang = document.querySelector('[data-slot="book-card-language"]') as HTMLElement
     expect(lang.textContent).toContain('🇧🇷')
     expect(lang.textContent?.toLowerCase()).toContain('pt')
@@ -173,7 +175,7 @@ describe('BookCard', () => {
     })
   })
 
-  it('ready: clicking Remover triggers removeBook mutation', async () => {
+  it('ready: clicking Remover opens confirm dialog and confirm calls removeBook', async () => {
     const book = makeBook({ ingestion_status: 'ready' })
     mockedRemove.mockResolvedValueOnce(undefined)
     render(
@@ -187,12 +189,22 @@ describe('BookCard', () => {
     await act(async () => {
       fireEvent.click(remove)
     })
+    const confirm = await waitFor(() => {
+      const node = document.querySelector(
+        '[data-slot="remove-book-dialog-confirm"]',
+      ) as HTMLButtonElement | null
+      if (!node) throw new Error('confirm button not found')
+      return node
+    })
+    await act(async () => {
+      fireEvent.click(confirm)
+    })
     await waitFor(() => {
       expect(mockedRemove).toHaveBeenCalledWith(book.id)
     })
   })
 
-  it('failed: shows error text + "Tentar novamente" which retries ingestion', async () => {
+  it('failed: shows error text + "Tentar novamente" which opens confirm and retries ingestion', async () => {
     const book = makeBook({
       ingestion_status: 'failed',
       ingestion_error: 'Falha ao baixar conteúdo do Gutendex.',
@@ -209,6 +221,16 @@ describe('BookCard', () => {
     ) as HTMLButtonElement
     await act(async () => {
       fireEvent.click(retry)
+    })
+    const confirm = await waitFor(() => {
+      const node = document.querySelector(
+        '[data-slot="retry-button-dialog-confirm"]',
+      ) as HTMLButtonElement | null
+      if (!node) throw new Error('retry confirm button not found')
+      return node
+    })
+    await act(async () => {
+      fireEvent.click(confirm)
     })
     await waitFor(() => {
       expect(mockedRetry).toHaveBeenCalledTimes(1)

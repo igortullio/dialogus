@@ -6,9 +6,12 @@ import { useCallback, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { Book } from '@/lib/api/_schemas'
-import { fetchIngestionStatus, removeBook, retryIngestion, startIngestion } from '@/lib/api/library'
+import { fetchIngestionStatus, startIngestion } from '@/lib/api/library'
 import { cn } from '@/lib/utils'
 import { BookDetailsDialog } from './BookDetailsDialog'
+import { CoverFallback } from './CoverFallback'
+import { RemoveBookDialog } from './RemoveBookDialog'
+import { RetryButton } from './RetryButton'
 import { isInProgress, StatusBadge } from './StatusBadge'
 
 const POLL_INTERVAL_MS = 2000
@@ -17,8 +20,6 @@ const INGESTION_QUERY_KEY = (id: string) => ['ingestion', id] as const
 
 const INGEST_LABEL = 'Ingerir'
 const DETAILS_LABEL = 'Detalhes'
-const REMOVE_LABEL = 'Remover'
-const RETRY_LABEL = 'Tentar novamente'
 const COVER_FALLBACK_HINT = 'Sem capa'
 
 function languageFlag(code: string | undefined): string {
@@ -57,16 +58,9 @@ function Cover({ book }: CoverProps) {
     )
   }
   return (
-    <div
-      aria-hidden
-      data-slot="book-card-cover-fallback"
-      className={cn(
-        'flex aspect-[2/3] w-full items-center justify-center rounded-md border bg-muted',
-        'font-mono text-2xl text-muted-foreground',
-      )}
-    >
+    <div data-slot="book-card-cover-fallback" className="w-full">
       <span className="sr-only">{COVER_FALLBACK_HINT}</span>
-      <span aria-hidden>{book.title.charAt(0).toUpperCase() || '?'}</span>
+      <CoverFallback title={book.title} author={book.authors[0]?.name} />
     </div>
   )
 }
@@ -130,16 +124,6 @@ export function BookCard({ book, className }: BookCardProps) {
     onSuccess: invalidateLibrary,
   })
 
-  const retryMutation = useMutation({
-    mutationFn: () => retryIngestion(book.id, makeIdempotencyKey('retry', book.id)),
-    onSuccess: invalidateLibrary,
-  })
-
-  const removeMutation = useMutation({
-    mutationFn: () => removeBook(book.id),
-    onSuccess: invalidateLibrary,
-  })
-
   return (
     <Card
       data-slot="book-card"
@@ -197,17 +181,7 @@ export function BookCard({ book, className }: BookCardProps) {
               >
                 {DETAILS_LABEL}
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                data-slot="book-card-action-remove"
-                onClick={() => removeMutation.mutate()}
-                disabled={removeMutation.isPending}
-                className="flex-1"
-              >
-                {REMOVE_LABEL}
-              </Button>
+              <RemoveBookDialog book={book} className="flex-1" />
             </div>
           )}
           {liveStatus === 'failed' && (
@@ -221,16 +195,7 @@ export function BookCard({ book, className }: BookCardProps) {
                   {lastError}
                 </p>
               )}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                data-slot="book-card-action-retry"
-                onClick={() => retryMutation.mutate()}
-                disabled={retryMutation.isPending}
-              >
-                {RETRY_LABEL}
-              </Button>
+              <RetryButton bookId={book.id} lastError={lastError} />
             </div>
           )}
         </div>
@@ -249,8 +214,6 @@ export const _internals = {
   INGESTION_QUERY_KEY,
   INGEST_LABEL,
   DETAILS_LABEL,
-  REMOVE_LABEL,
-  RETRY_LABEL,
   COVER_FALLBACK_HINT,
   languageFlag,
   authorList,

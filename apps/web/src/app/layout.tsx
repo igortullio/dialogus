@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { AddGutendexSheet } from '@/components/library/AddGutendexSheet'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import { QueryClientProvider } from '@/lib/query-client'
@@ -19,7 +20,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           enableSystem
           disableTransitionOnChange
         >
-          <QueryClientProvider>{children}</QueryClientProvider>
+          <QueryClientProvider>
+            {children}
+            <AddGutendexSheet />
+          </QueryClientProvider>
           <Toaster />
         </ThemeProvider>
       </body>

@@ -1,4 +1,5 @@
-import { ingestionStatusEnum, threadMetadataSchema } from '@dialogus/shared/schemas'
+import { ingestionStatusEnum } from '@dialogus/shared/schemas/ingestion'
+import { threadMetadataSchema } from '@dialogus/shared/schemas/thread'
 import { z } from 'zod'
 
 const bookAuthorSchema = z.object({

@@ -1,4 +1,4 @@
-import { CITATION_MARKER_REGEX } from '@dialogus/rag'
+import { CITATION_MARKER_REGEX } from '@dialogus/rag/domain/constants/citation'
 
 export type ParserState = { kind: 'text' } | { kind: 'marker_pending'; buffer: string }
 

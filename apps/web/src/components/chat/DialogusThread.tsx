@@ -108,9 +108,7 @@ export function DialogusThread({
     <DialogusThreadContextProvider value={contextValue}>
       <AssistantRuntimeProvider runtime={runtime}>
         <ThreadPrimitive.Root className={cn('flex h-full flex-col', className)}>
-          <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-4">
-            {children}
-          </ThreadPrimitive.Viewport>
+          {children}
         </ThreadPrimitive.Root>
       </AssistantRuntimeProvider>
     </DialogusThreadContextProvider>

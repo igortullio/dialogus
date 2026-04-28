@@ -68,6 +68,137 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:integration
 
+  integration-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Boots Postgres via the Docker action, runs migrations, starts the four
+    # Node apps with mock providers, and runs the Playwright happy-path. LLM
+    # round-trips are intercepted at the apps/mastra layer when E2E_MOCK_LLM=1
+    # so the suite makes zero outbound Anthropic / OpenAI calls.
+    env:
+      ANTHROPIC_API_KEY: test-anthropic-key
+      OPENAI_API_KEY: test-openai-key
+      EMBEDDING_PROVIDER: mock
+      SUMMARY_GENERATOR: mock
+      E2E_MOCK_LLM: '1'
+      MASTRA_PORT: '3002'
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_MASTRA_URL: http://localhost:3002
+      PLAYWRIGHT_BASE_URL: http://localhost:3000
+      PLAYWRIGHT_DISABLE_WEB_SERVER: '1'
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: dialogus
+          POSTGRES_USER: dialogus
+          POSTGRES_PASSWORD: dialogus
+        options: >-
+          --health-cmd "pg_isready -U dialogus -d dialogus"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.4 --activate
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm --filter @dialogus/web exec playwright install --with-deps chromium
+      - name: Apply database migrations
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgres://dialogus:dialogus@localhost:5432/dialogus
+      - name: Start app stack (api + worker + mastra + web)
+        run: pnpm dev > stack.log 2>&1 &
+        env:
+          DATABASE_URL: postgres://dialogus:dialogus@localhost:5432/dialogus
+      - name: Wait for /
+        run: npx --yes wait-on@7.2.0 http://localhost:3000 http://localhost:3001/health http://localhost:3002 -t 120000
+      - name: Run Playwright integration suite
+        run: pnpm --filter @dialogus/web test:e2e -- --project=integration
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+            stack.log
+          if-no-files-found: ignore
+
+  a11y:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ANTHROPIC_API_KEY: test-anthropic-key
+      OPENAI_API_KEY: test-openai-key
+      EMBEDDING_PROVIDER: mock
+      SUMMARY_GENERATOR: mock
+      MASTRA_PORT: '3002'
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_MASTRA_URL: http://localhost:3002
+      PLAYWRIGHT_BASE_URL: http://localhost:3000
+      PLAYWRIGHT_DISABLE_WEB_SERVER: '1'
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: dialogus
+          POSTGRES_USER: dialogus
+          POSTGRES_PASSWORD: dialogus
+        options: >-
+          --health-cmd "pg_isready -U dialogus -d dialogus"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.4 --activate
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright browsers
+        run: pnpm --filter @dialogus/web exec playwright install --with-deps chromium
+      - name: Apply database migrations
+        run: pnpm db:migrate
+        env:
+          DATABASE_URL: postgres://dialogus:dialogus@localhost:5432/dialogus
+      - name: Start apps/api + apps/web (a11y does not need mastra/worker)
+        run: pnpm --parallel --filter @dialogus/api --filter @dialogus/web dev > stack.log 2>&1 &
+        env:
+          DATABASE_URL: postgres://dialogus:dialogus@localhost:5432/dialogus
+      - name: Wait for /
+        run: npx --yes wait-on@7.2.0 http://localhost:3000 http://localhost:3001/health -t 120000
+      - name: Run accessibility suite
+        run: pnpm --filter @dialogus/web test:a11y
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+            stack.log
+          if-no-files-found: ignore
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10

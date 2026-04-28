@@ -17,6 +17,7 @@ import {
   DialogusChapterSummaryReadAdapter,
   DialogusChunkReadAdapter,
 } from './persistence'
+import { activateAnthropicMock } from './test-mocks/anthropic-msw'
 
 const MASTRA_STORAGE_ID = 'dialogus-mastra-pg'
 const MASTRA_LOGGER_NAME = '@dialogus/mastra'
@@ -84,6 +85,10 @@ export function buildMastra(options: BuildMastraOptions = {}): BuildMastraResult
 }
 
 loadEnvFromRoot()
+
+if (process.env.E2E_MOCK_LLM === '1') {
+  activateAnthropicMock()
+}
 
 const built = buildMastra()
 

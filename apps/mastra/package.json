@@ -26,13 +26,13 @@
     "@mastra/pg": "1.9.2",
     "drizzle-orm": "^0.45.0",
     "mastra": "1.6.3",
+    "msw": "^2.4.9",
     "pino": "^9.0.0",
     "pino-pretty": "^11.0.0"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^11.0.0",
     "@types/node": "^22.10.5",
-    "msw": "^2.4.9",
     "tsx": "^4.19.0",
     "typescript": "^6.0.0",
     "vitest": "^4.0.0"

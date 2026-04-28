@@ -55,10 +55,12 @@ describe('.github/workflows/ci.yml', () => {
     expect(c?.['cancel-in-progress']).toBe("${{ github.ref != 'refs/heads/main' }}")
   })
 
-  it('defines exactly the four jobs lint-and-typecheck, test, integration, build', () => {
+  it('defines the six jobs lint-and-typecheck, test, integration, integration-web, a11y, build', () => {
     expect(Object.keys(workflow.jobs ?? {}).sort()).toEqual([
+      'a11y',
       'build',
       'integration',
+      'integration-web',
       'lint-and-typecheck',
       'test',
     ])
@@ -113,7 +115,7 @@ describe('.github/workflows/ci.yml', () => {
         expect(step.with?.cache).toBe('pnpm')
       }
     }
-    expect(setupNodeCount).toBe(4)
+    expect(setupNodeCount).toBe(6)
   })
 
   it('every job activates Corepack with pinned pnpm@9.15.4 before pnpm install', () => {
@@ -129,10 +131,52 @@ describe('.github/workflows/ci.yml', () => {
     }
   })
 
-  it('does NOT configure a Postgres service (deferred per ADR-007 product-level)', () => {
+  it('only the integration-web and a11y jobs configure a Postgres service container', () => {
+    const jobsWithServices: string[] = []
     for (const [name, job] of Object.entries(workflow.jobs ?? {})) {
-      expect(job.services, `${name} services`).toBeUndefined()
+      if (job.services !== undefined) jobsWithServices.push(name)
     }
+    expect(jobsWithServices.slice().sort()).toEqual(['a11y', 'integration-web'])
+    for (const name of jobsWithServices) {
+      const services = workflow.jobs?.[name]?.services ?? {}
+      expect(services).toHaveProperty('postgres')
+      const postgres = services.postgres as { image?: string; ports?: string[] } | undefined
+      expect(postgres?.image).toMatch(/pgvector\/pgvector:pg/)
+      expect(postgres?.ports).toContain('5432:5432')
+    }
+  })
+
+  it('integration-web job runs the Playwright integration project with timeout ≤ 10 minutes', () => {
+    const job = workflow.jobs?.['integration-web']
+    expect(job).toBeDefined()
+    expect(job?.['runs-on']).toBe('ubuntu-latest')
+    const timeout = job?.['timeout-minutes'] ?? 0
+    expect(timeout).toBeGreaterThan(0)
+    expect(timeout).toBeLessThanOrEqual(10)
+    const runs = (job?.steps ?? []).map((s) => s.run ?? '')
+    expect(runs.some((r) => r.includes('test:e2e') && r.includes('--project=integration'))).toBe(
+      true,
+    )
+  })
+
+  it('integration-web job activates LLM mocking via E2E_MOCK_LLM=1 and embedding/summary mocks', () => {
+    const env = workflow.jobs?.['integration-web']?.env ?? {}
+    expect(String(env.E2E_MOCK_LLM)).toBe('1')
+    expect(env.EMBEDDING_PROVIDER).toBe('mock')
+    expect(env.SUMMARY_GENERATOR).toBe('mock')
+    expect(env.ANTHROPIC_API_KEY).toBe('test-anthropic-key')
+    expect(env.OPENAI_API_KEY).toBe('test-openai-key')
+  })
+
+  it('a11y job runs test:a11y with timeout ≤ 5 minutes', () => {
+    const job = workflow.jobs?.a11y
+    expect(job).toBeDefined()
+    expect(job?.['runs-on']).toBe('ubuntu-latest')
+    const timeout = job?.['timeout-minutes'] ?? 0
+    expect(timeout).toBeGreaterThan(0)
+    expect(timeout).toBeLessThanOrEqual(5)
+    const runs = (job?.steps ?? []).map((s) => s.run ?? '')
+    expect(runs.some((r) => r.includes('test:a11y'))).toBe(true)
   })
 
   it('lint-and-typecheck job runs pnpm lint and pnpm typecheck', () => {

@@ -1,0 +1,35 @@
+{
+  "id": 996,
+  "title": "Don Quixote",
+  "authors": [
+    {
+      "name": "Cervantes Saavedra, Miguel de",
+      "birth_year": 1547,
+      "death_year": 1616
+    }
+  ],
+  "translators": [
+    {
+      "name": "Ormsby, John",
+      "birth_year": 1829,
+      "death_year": 1895
+    }
+  ],
+  "subjects": [
+    "Knights and knighthood -- Fiction",
+    "Don Quixote (Fictitious character) -- Fiction",
+    "Spain -- Social life and customs -- 16th century -- Fiction"
+  ],
+  "bookshelves": ["Browsing: Adventure", "Browsing: Culture/Civilization"],
+  "languages": ["en"],
+  "copyright": false,
+  "media_type": "Text",
+  "formats": {
+    "application/epub+zip": "https://www.gutenberg.org/ebooks/996.epub3.images",
+    "application/x-mobipocket-ebook": "https://www.gutenberg.org/ebooks/996.kf8.images",
+    "text/plain; charset=utf-8": "https://www.gutenberg.org/files/996/996-0.txt",
+    "text/html": "https://www.gutenberg.org/cache/epub/996/pg996-images.html",
+    "image/jpeg": "https://www.gutenberg.org/cache/epub/996/pg996.cover.medium.jpg"
+  },
+  "download_count": 14328
+}

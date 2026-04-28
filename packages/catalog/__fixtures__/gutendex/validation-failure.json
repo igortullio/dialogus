@@ -1,0 +1,22 @@
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 9999,
+      "authors": [
+        {
+          "name": "Anonymous",
+          "birth_year": null,
+          "death_year": null
+        }
+      ],
+      "subjects": [],
+      "languages": ["en"],
+      "formats": {
+        "text/plain; charset=utf-8": "https://www.gutenberg.org/files/9999/9999-0.txt"
+      }
+    }
+  ]
+}

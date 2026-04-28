@@ -33,11 +33,16 @@ describe('@dialogus/catalog package.json', () => {
     expect(peers.postgres).toBeTypeOf('string')
   })
 
-  it('does not pull in an HTTP client at this point in the build (task_08 adds them)', () => {
+  it('declares lru-cache (Gutendex 60s cache, ADR-004) and avoids competing HTTP clients', () => {
     const deps = (pkg.dependencies ?? {}) as Record<string, string>
-    expect('lru-cache' in deps).toBe(false)
+    expect(deps['lru-cache']).toBeTypeOf('string')
     expect('undici' in deps).toBe(false)
     expect('axios' in deps).toBe(false)
+  })
+
+  it('declares msw as a devDependency for committed Gutendex fixtures', () => {
+    const devDeps = (pkg.devDependencies ?? {}) as Record<string, string>
+    expect(devDeps.msw).toBeTypeOf('string')
   })
 
   it('exposes typecheck + test scripts', () => {

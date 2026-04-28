@@ -23,3 +23,16 @@ export class GutendexUpstreamError extends DialogusError {
     this.upstreamStatus = upstreamStatus
   }
 }
+
+export class GutendexValidationError extends DialogusError {
+  readonly issues: readonly { path: string; message: string }[]
+
+  constructor(
+    message: string,
+    issues: readonly { path: string; message: string }[],
+    cause?: unknown,
+  ) {
+    super('GUTENDEX_VALIDATION_FAILED', message, cause)
+    this.issues = issues
+  }
+}

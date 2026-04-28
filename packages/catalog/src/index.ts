@@ -37,6 +37,7 @@ export {
   BookNotFoundError,
   DuplicateBookError,
   GutendexUpstreamError,
+  GutendexValidationError,
 } from './domain/book/BookError'
 export type {
   BookRepository,

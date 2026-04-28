@@ -1,0 +1,63 @@
+{
+  "count": 76,
+  "next": "https://gutendex.com/books?page=2&search=Don+Quixote",
+  "previous": null,
+  "results": [
+    {
+      "id": 996,
+      "title": "Don Quixote",
+      "authors": [
+        {
+          "name": "Cervantes Saavedra, Miguel de",
+          "birth_year": 1547,
+          "death_year": 1616
+        }
+      ],
+      "translators": [
+        {
+          "name": "Ormsby, John",
+          "birth_year": 1829,
+          "death_year": 1895
+        }
+      ],
+      "subjects": [
+        "Knights and knighthood -- Fiction",
+        "Don Quixote (Fictitious character) -- Fiction",
+        "Spain -- Social life and customs -- 16th century -- Fiction"
+      ],
+      "bookshelves": ["Browsing: Adventure", "Browsing: Culture/Civilization"],
+      "languages": ["en"],
+      "copyright": false,
+      "media_type": "Text",
+      "formats": {
+        "application/epub+zip": "https://www.gutenberg.org/ebooks/996.epub3.images",
+        "application/x-mobipocket-ebook": "https://www.gutenberg.org/ebooks/996.kf8.images",
+        "text/plain; charset=utf-8": "https://www.gutenberg.org/files/996/996-0.txt",
+        "text/html": "https://www.gutenberg.org/cache/epub/996/pg996-images.html",
+        "image/jpeg": "https://www.gutenberg.org/cache/epub/996/pg996.cover.medium.jpg"
+      },
+      "download_count": 14328
+    },
+    {
+      "id": 5921,
+      "title": "The History of Don Quixote, Volume 1, Complete",
+      "authors": [
+        {
+          "name": "Cervantes Saavedra, Miguel de",
+          "birth_year": 1547,
+          "death_year": 1616
+        }
+      ],
+      "subjects": ["Knights and knighthood -- Fiction"],
+      "languages": ["en"],
+      "copyright": false,
+      "media_type": "Text",
+      "formats": {
+        "application/epub+zip": "https://www.gutenberg.org/ebooks/5921.epub3.images",
+        "text/plain; charset=utf-8": "https://www.gutenberg.org/files/5921/5921-0.txt",
+        "image/jpeg": "https://www.gutenberg.org/cache/epub/5921/pg5921.cover.medium.jpg"
+      },
+      "download_count": 4211
+    }
+  ]
+}

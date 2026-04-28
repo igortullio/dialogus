@@ -1,0 +1,51 @@
+{
+  "count": 32,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 55752,
+      "title": "Memórias Póstumas de Brás Cubas",
+      "authors": [
+        {
+          "name": "Machado de Assis",
+          "birth_year": 1839,
+          "death_year": 1908
+        }
+      ],
+      "subjects": ["Brazilian fiction -- 19th century", "Rio de Janeiro (Brazil) -- Fiction"],
+      "bookshelves": [],
+      "languages": ["pt"],
+      "copyright": false,
+      "media_type": "Text",
+      "formats": {
+        "application/epub+zip": "https://www.gutenberg.org/ebooks/55752.epub3.images",
+        "text/plain; charset=utf-8": "https://www.gutenberg.org/files/55752/55752-0.txt",
+        "image/jpeg": "https://www.gutenberg.org/cache/epub/55752/pg55752.cover.medium.jpg"
+      },
+      "download_count": 982
+    },
+    {
+      "id": 56737,
+      "title": "Dom Casmurro",
+      "authors": [
+        {
+          "name": "Machado de Assis",
+          "birth_year": 1839,
+          "death_year": 1908
+        }
+      ],
+      "subjects": ["Brazilian fiction -- 19th century"],
+      "bookshelves": [],
+      "languages": ["pt"],
+      "copyright": false,
+      "media_type": "Text",
+      "formats": {
+        "application/epub+zip": "https://www.gutenberg.org/ebooks/56737.epub3.images",
+        "text/plain; charset=utf-8": "https://www.gutenberg.org/files/56737/56737-0.txt",
+        "image/jpeg": "https://www.gutenberg.org/cache/epub/56737/pg56737.cover.medium.jpg"
+      },
+      "download_count": 1421
+    }
+  ]
+}

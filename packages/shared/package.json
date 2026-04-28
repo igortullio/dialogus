@@ -14,9 +14,12 @@
     "./http/problem": "./src/http/problem.ts",
     "./types": "./src/types/index.ts",
     "./schemas": "./src/schemas/index.ts",
+    "./schemas/book": "./src/schemas/book.ts",
+    "./schemas/catalog": "./src/schemas/catalog.ts",
     "./schemas/chat": "./src/schemas/chat.ts",
     "./schemas/health": "./src/schemas/health.ts",
     "./schemas/ingestion": "./src/schemas/ingestion.ts",
+    "./schemas/library": "./src/schemas/library.ts",
     "./schemas/thread": "./src/schemas/thread.ts"
   },
   "scripts": {

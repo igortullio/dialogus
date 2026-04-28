@@ -1,4 +1,7 @@
+export * from './book.js'
+export * from './catalog.js'
 export * from './chat.js'
 export * from './health.js'
 export * from './ingestion.js'
+export * from './library.js'
 export * from './thread.js'

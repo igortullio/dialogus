@@ -74,6 +74,30 @@ describe('@dialogus/shared exports map', () => {
     expect(typeof mod.threadMetadataUpdateSchema.parse).toBe('function')
   })
 
+  it('resolves the ./schemas/book subpath', async () => {
+    const mod = await import('@dialogus/shared/schemas/book')
+    expect(mod).toBeTypeOf('object')
+    expect(typeof mod.bookDtoSchema.parse).toBe('function')
+    expect(typeof mod.gutendexBookSchema.parse).toBe('function')
+    expect(typeof mod.bookAuthorSchema.parse).toBe('function')
+  })
+
+  it('resolves the ./schemas/catalog subpath', async () => {
+    const mod = await import('@dialogus/shared/schemas/catalog')
+    expect(mod).toBeTypeOf('object')
+    expect(typeof mod.searchRequestSchema.parse).toBe('function')
+    expect(typeof mod.searchResponseSchema.parse).toBe('function')
+  })
+
+  it('resolves the ./schemas/library subpath', async () => {
+    const mod = await import('@dialogus/shared/schemas/library')
+    expect(mod).toBeTypeOf('object')
+    expect(typeof mod.addBookRequestSchema.parse).toBe('function')
+    expect(typeof mod.listLibraryQuerySchema.parse).toBe('function')
+    expect(typeof mod.bookResponseSchema.parse).toBe('function')
+    expect(typeof mod.listLibraryResponseSchema.parse).toBe('function')
+  })
+
   it('resolves the ./schemas barrel subpath', async () => {
     const mod = await import('@dialogus/shared/schemas')
     expect(mod).toBeTypeOf('object')
@@ -82,5 +106,8 @@ describe('@dialogus/shared exports map', () => {
     expect(typeof mod.chatStreamRequestSchema.parse).toBe('function')
     expect(typeof mod.threadMetadataSchema.parse).toBe('function')
     expect(typeof mod.threadMetadataUpdateSchema.parse).toBe('function')
+    expect(typeof mod.bookDtoSchema.parse).toBe('function')
+    expect(typeof mod.searchRequestSchema.parse).toBe('function')
+    expect(typeof mod.addBookRequestSchema.parse).toBe('function')
   })
 })

@@ -24,6 +24,7 @@ export const bookSchema = z.object({
   created_at: z.iso.datetime({ offset: true }),
   updated_at: z.iso.datetime({ offset: true }),
   deleted_at: z.iso.datetime({ offset: true }).nullable(),
+  chapter_count: z.number().int().positive().optional(),
 })
 
 export type Book = z.infer<typeof bookSchema>

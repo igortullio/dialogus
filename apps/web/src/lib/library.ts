@@ -1,3 +1,5 @@
+import { listLibraryResponseSchema } from '@dialogus/shared/schemas/library'
+
 const DEFAULT_BASE_URL = 'http://localhost:3001'
 
 export interface LibraryCounts {
@@ -21,6 +23,19 @@ async function fetchCount(url: string): Promise<number> {
   const json: unknown = await response.json()
   if (!isCountEnvelope(json)) throw new Error('invalid response shape')
   return json.meta.count
+}
+
+export async function fetchLibraryCount(): Promise<number> {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_BASE_URL
+  try {
+    const response = await fetch(`${base}/api/library/books?limit=1`, { cache: 'no-store' })
+    if (!response.ok) return 0
+    const json: unknown = await response.json()
+    const parsed = listLibraryResponseSchema.safeParse(json)
+    return parsed.success ? parsed.data.meta.count : 0
+  } catch {
+    return 0
+  }
 }
 
 export async function fetchLibraryCountByStatus(): Promise<LibraryCounts> {

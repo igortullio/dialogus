@@ -1,6 +1,9 @@
+import { spawnSync } from 'node:child_process'
 import { DIALOGUS_AGENT_ID } from '@dialogus/rag'
 import { Mastra } from '@mastra/core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+const dockerAvailable = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}']).status === 0
 
 const ORIGINAL_ENV = { ...process.env }
 
@@ -17,7 +20,7 @@ afterAll(() => {
   process.env = { ...ORIGINAL_ENV }
 })
 
-describe('apps/mastra mastra.config.ts', () => {
+describe.skipIf(!dockerAvailable)('apps/mastra mastra.config.ts', () => {
   it('exports a Mastra instance with dialogusAgent registered', async () => {
     const mod = await import('../mastra.config')
 

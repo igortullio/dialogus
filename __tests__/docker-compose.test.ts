@@ -62,8 +62,11 @@ describe('docker-compose.yml', () => {
   it('configures POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB with dialogus defaults overridable via host env', () => {
     const env = compose.services?.postgres?.environment as Record<string, string> | undefined
     expect(env).toBeTypeOf('object')
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting literal Docker Compose variable interpolation syntax
     expect(env?.POSTGRES_USER).toBe('${POSTGRES_USER:-dialogus}')
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting literal Docker Compose variable interpolation syntax
     expect(env?.POSTGRES_PASSWORD).toBe('${POSTGRES_PASSWORD:-dialogus}')
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting literal Docker Compose variable interpolation syntax
     expect(env?.POSTGRES_DB).toBe('${POSTGRES_DB:-dialogus}')
   })
 

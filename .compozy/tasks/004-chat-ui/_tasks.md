@@ -18,7 +18,7 @@
 | 12 | Library page (/library + LibraryGrid + BookCard + StatusBadge) | completed | high | task_03, task_06 |
 | 13 | Gutendex drawer + Remove dialog + Retry button + CoverFallback | completed | high | task_12 |
 | 14 | Playwright integration + Lighthouse a11y + CI extension | completed | medium | task_11, task_12, task_13 |
-| 15 | Manual smoke + README + screencast + Feature 004 closure | pending | medium | task_14 |
+| 15 | Manual smoke + README + screencast + Feature 004 closure | completed | medium | task_14 |
 | 16 | V1 cross-feature manual validation gate | pending | medium | task_15 |
 
 **External prerequisite:** Feature 003 task_13 (RAG agent closure) must be merged before task_01 starts.

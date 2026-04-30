@@ -51,7 +51,9 @@ describe('.github/workflows/ci.yml', () => {
 
   it('declares a ref-keyed concurrency group that cancels PR runs but preserves main pushes', () => {
     const c = workflow.concurrency
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting literal GitHub Actions expression strings
     expect(c?.group).toBe('ci-${{ github.ref }}')
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting literal GitHub Actions expression strings
     expect(c?.['cancel-in-progress']).toBe("${{ github.ref != 'refs/heads/main' }}")
   })
 

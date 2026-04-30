@@ -1,4 +1,9 @@
-import { BookNotFoundError, DuplicateBookError, GutendexUpstreamError } from '@dialogus/catalog'
+import {
+  BookNotFoundError,
+  DuplicateBookError,
+  GutendexUpstreamError,
+  GutendexValidationError,
+} from '@dialogus/catalog'
 import {
   ConfigError,
   DialogusError,
@@ -110,6 +115,17 @@ function mapError(err: Error, path: string): MappedError {
       body: { ...problemDetails('gutendex-upstream-error', 503, err.message), instance: path },
       status: 503,
       headers: { 'retry-after': '60' },
+    }
+  }
+
+  if (err instanceof GutendexValidationError) {
+    const issues = err.issues.map((issue) => ({ field: issue.path, message: issue.message }))
+    return {
+      body: {
+        ...problemDetails('gutendex-validation-failed', 503, err.message, issues),
+        instance: path,
+      },
+      status: 503,
     }
   }
 

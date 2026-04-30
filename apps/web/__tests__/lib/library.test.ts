@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchLibraryCountByStatus } from '../../src/lib/library'
+import { fetchLibraryCount, fetchLibraryCountByStatus } from '../../src/lib/library'
 
 const FALLBACK = { total: 0, ready: 0 } as const
 const DEFAULT_BASE_URL = 'http://localhost:3001'
@@ -28,6 +28,54 @@ afterEach(() => {
   } else {
     process.env.NEXT_PUBLIC_API_URL = originalEnvUrl
   }
+})
+
+describe('fetchLibraryCount', () => {
+  it('returns meta.count from a valid envelope response', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [], meta: { count: 3 } }))
+
+    await expect(fetchLibraryCount()).resolves.toBe(3)
+    expect(fetchMock).toHaveBeenCalledWith('http://api.test/api/library/books?limit=1', {
+      cache: 'no-store',
+    })
+  })
+
+  it('returns 0 when fetch throws a network error', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('network down'))
+
+    await expect(fetchLibraryCount()).resolves.toBe(0)
+  })
+
+  it('returns 0 when the response is non-2xx', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [], meta: { count: 5 } }, { status: 503 }))
+
+    await expect(fetchLibraryCount()).resolves.toBe(0)
+  })
+
+  it('returns 0 when the response shape is invalid (missing meta.count)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [] }))
+
+    await expect(fetchLibraryCount()).resolves.toBe(0)
+  })
+
+  it('passes cache: "no-store" to fetch', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [], meta: { count: 0 } }))
+
+    await fetchLibraryCount()
+
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(String), { cache: 'no-store' })
+  })
+
+  it('falls back to http://localhost:3001 when NEXT_PUBLIC_API_URL is unset', async () => {
+    delete process.env.NEXT_PUBLIC_API_URL
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [], meta: { count: 0 } }))
+
+    await fetchLibraryCount()
+
+    expect(fetchMock).toHaveBeenCalledWith(`${DEFAULT_BASE_URL}/api/library/books?limit=1`, {
+      cache: 'no-store',
+    })
+  })
 })
 
 describe('fetchLibraryCountByStatus', () => {

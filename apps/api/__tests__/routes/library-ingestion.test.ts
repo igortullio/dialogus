@@ -110,6 +110,11 @@ function buildApp(deps: { db: Database; enqueueImpl?: ReturnType<typeof vi.fn> }
     logger,
     enqueueDeps: { databaseUrl: 'postgres://test' },
     ...(deps.enqueueImpl ? { enqueueImpl: deps.enqueueImpl } : {}),
+    addBookToLibrary: vi.fn(),
+    listLibrary: vi.fn(),
+    getBook: vi.fn(),
+    removeBook: vi.fn(),
+    restoreBook: vi.fn(),
   })
   app.route('/api/library', route)
   return { app, logger }

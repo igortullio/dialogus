@@ -209,6 +209,41 @@ curl -s -X DELETE "http://localhost:3001/api/library/books/<id>"
 # → 204 No Content; GET /api/library/books now excludes it
 ```
 
+## Ingestion (feature 002)
+
+The ingestion pipeline turns a `discovered` book into a fully vector-indexed `ready` book via a seven-stage pg-boss chain: **download → clean → parse → chunk → summarize → embed → index**. `apps/worker` is the sole long-running pg-boss consumer; `apps/api` enqueues work via a transient client.
+
+### 6-command onboarding demo
+
+```bash
+# 1. Find Moby Dick in Gutendex (id 2701)
+curl -s "http://localhost:3001/api/catalog/search?q=moby+dick&limit=1" | jq '.data[0].id'
+
+# 2. Add Moby Dick to the library
+curl -s -X POST http://localhost:3001/api/library/books \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: demo-add-moby" \
+  -d '{"gutendex_id": 2701}' | jq '.data.id'   # → <book_id>
+
+# 3. Kick off ingestion (returns 202 immediately)
+curl -s -X POST http://localhost:3001/api/library/books/<book_id>/ingest \
+  -H "Idempotency-Key: demo-ingest-moby" | jq '.data.status'
+
+# 4. Poll until ready (stage transitions every few seconds)
+curl -s "http://localhost:3001/api/library/books/<book_id>/ingestion" \
+  | jq '.data | {status, progress, last_stage, error}'
+
+# 5. Retry a failed ingestion (resumes from the failed stage only)
+curl -s -X POST http://localhost:3001/api/library/books/<book_id>/ingest/retry \
+  -H "Idempotency-Key: demo-retry-moby" | jq '.data.resuming_stage'
+
+# 6. Fetch a chunk by id (citation contract for the RAG agent)
+curl -s "http://localhost:3001/api/library/chunks/<chunk_id>" \
+  | jq '.data | {chapter_title, text: .text[:120]}'
+```
+
+> `OPENAI_API_KEY` is required for the embed stage. Set `EMBEDDING_PROVIDER=mock` in `.env` during development to skip real OpenAI calls and use deterministic unit-vector embeddings instead. The summarize stage uses `ANTHROPIC_API_KEY`; set `SUMMARY_GENERATOR=mock` to bypass it.
+
 ## Next steps
 
 Foundation V1 is the baseline; product features begin with the book catalog. The next feature's PRD lives at [`.compozy/tasks/001-catalog/_prd.md`](./.compozy/tasks/001-catalog/_prd.md).

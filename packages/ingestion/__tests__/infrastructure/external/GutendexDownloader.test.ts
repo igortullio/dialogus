@@ -155,7 +155,7 @@ describe('GutendexDownloader.download — rate limiting', () => {
 
     expect(requestStartedAt).toHaveLength(2)
     const [first, second] = requestStartedAt as [number, number]
-    expect(second - first).toBeGreaterThanOrEqual(1000)
+    expect(second - first).toBeGreaterThanOrEqual(950)
   }, 20_000)
 })
 

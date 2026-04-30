@@ -65,6 +65,7 @@ describe('Domain ports compile against fake adapters', () => {
       list: async (_filter: ListFilter, _cursor?: Cursor, _limit?: number) => ({
         books: [],
         nextCursor: null,
+        total: 0,
       }),
       softDelete: async () => undefined,
       restore: async () => {

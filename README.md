@@ -21,7 +21,7 @@ pnpm dev
 Open <http://localhost:3000> — the landing page should render:
 
 ```
-dIAlogus — api: up / db: up / pgboss: up
+dIAlogus — api: up / db: up / pgboss: up / livros: 0
 ```
 
 > First-run only: copy `.env.example` to `.env` before the first `pnpm db:migrate`. The bundled defaults already point at the docker-compose Postgres on `localhost:5432`, so no edits are required to boot the stack.
@@ -42,9 +42,132 @@ The repository is a pnpm monorepo with two roots. `apps/` holds the runnable pro
 
 At runtime `pnpm dev` starts three Node processes in parallel — the Next.js web server on `:3000`, the Hono API server on `:3001`, and the `apps/worker` background process — alongside the Postgres 18 + pgvector container started by `docker compose up -d`. `apps/api` is purely request-handling: when a route needs to enqueue work it uses a transient pg-boss client (start → send → stop) via `apps/api/src/infrastructure/pgboss/enqueue.ts`. `apps/worker` is the only process that calls `boss.work(...)` or `boss.schedule(...)`; ADR-005 of Feature 002 codifies this split. There is no Mastra dev server, no Tailwind, and no shadcn yet — those land with later features. The end-to-end signal that the stack is wired correctly is the landing page line `dIAlogus — api: up / db: up / pgboss: up`: rendering it requires env validation through `@dialogus/shared/config`, a server-side fetch from `apps/web` to `apps/api`, Drizzle's `SELECT 1` probe against Postgres, and a presence check on the `pgboss` schema, all in one request.
 
+## Stack
+
+- **`apps/web`** — Next.js 16 App Router on port 3000, Tailwind v4 (CSS-first
+  with `@theme inline`), shadcn/ui (new-york + neutral) primitives,
+  [`@assistant-ui/react`](https://github.com/assistant-ui/assistant-ui)
+  chat-shell against Vercel AI SDK `useChat`, TanStack Query for catalog and
+  thread state. Two routes: `/` (chat) and `/library`.
+- **`apps/api`** — Hono 4 on port 3001. RFC 9457 Problem Details, cursor
+  pagination, Zod-typed envelopes.
+- **`apps/mastra`** — Mastra Dev Server on port 3002 hosting the
+  `dialogusAgent` (Anthropic Claude) with four tools: `semantic_search`,
+  `list_chapters`, `get_chapter_summary`, `find_character_mentions`.
+- **`apps/worker`** — pg-boss consumer for ingestion + catalog cleanup.
+- **`packages/`** — `@dialogus/shared` (env + Zod schemas), `@dialogus/db`
+  (Drizzle + migrations), `@dialogus/catalog`, `@dialogus/ingestion`,
+  `@dialogus/rag`. DDD layout (`domain` / `application` / `infrastructure`).
+- **Postgres 18 + pgvector** for everything: catalog, chunks + embeddings,
+  Mastra Memory (separate logical schema), pg-boss queues.
+- **Tooling** — Biome 2 (lint + format), Vitest 4 (unit), Testcontainers
+  (integration), Playwright + Lighthouse + axe-core (`apps/web` E2E + a11y),
+  GitHub Actions (6-job CI: `lint-and-typecheck`, `test`, `integration`,
+  `integration-web`, `a11y`, `build`).
+
+## Chat UI (feature 004)
+
+The chat-first interface for dIAlogus — a Next.js 16 app where the owner
+reads, asks grounded questions, sees citations resolve in real time, and
+controls per-book spoiler boundaries. Two routes (`/` for chat, `/library`
+for the book grid), localStorage-backed spoiler caps, Mastra Memory-backed
+thread metadata (rename + pin), streaming-aware citation parser.
+
+### Quickstart
+
+```bash
+docker compose up -d           # Postgres 18 + pgvector
+pnpm db:migrate                # apply Drizzle migrations + bootstrap pg-boss
+pnpm dev                       # start apps/web + apps/api + apps/worker + apps/mastra
+open http://localhost:3000     # click "Adicionar e ingerir" on a Primeiros-passos card
+```
+
+> First run only: copy `.env.example` to `.env` and add an `ANTHROPIC_API_KEY`
+> (and optionally `OPENAI_API_KEY` for embeddings — the worker accepts
+> `EMBEDDING_PROVIDER=mock` for development without a key).
+
+### Walkthrough
+
+| Surface | Screenshot |
+|--------|-----------|
+| Empty landing — "Primeiros passos" with three pre-ingestable classics | ![Landing — Primeiros passos](docs/screenshots/landing-empty.png) |
+| Active thread — citation badges inline, dark mode | ![Thread with citations](docs/screenshots/thread-with-citations.png) |
+| Citation side panel — full chunk text + chapter context | ![Citation side panel](docs/screenshots/citation-side-panel.png) |
+| Spoiler-cap popover — slider per book in the thread header | ![Spoiler-cap popover](docs/screenshots/spoiler-slider.png) |
+| `/library` — grid with status badges + Gutendex add button | ![Library grid](docs/screenshots/library-grid.png) |
+| Gutendex add drawer — left-side `<Sheet>` per ADR-010 | ![Gutendex add drawer](docs/screenshots/gutendex-drawer.png) |
+
+> The 6 PNGs above are dark-mode mockups rendered via
+> `docs/screenshots/_render-mockups.mjs` against the project's exact design
+> tokens (`apps/web/src/app/globals.css`). They are replaced by real captures
+> from the dogfooding session that produces the screencast.
+
+A 3-minute screencast covers the four user journeys (search → ingest → ask →
+spoiler-safe read). See [`docs/SCREENCAST.md`](docs/SCREENCAST.md) for the
+recording status, the scene-by-scene script, and the link/path to the final
+file.
+
+### Architecture
+
+```
+Browser (localhost:3000)
+   │
+   │  React Server Components + TanStack Query hydration
+   ▼
+apps/web ──── /api/library/*  ───▶ apps/api  (port 3001) ──▶ Postgres
+   │                                                 ▲
+   │  useChat (Vercel AI SDK + assistant-ui)         │
+   ▼                                                 │
+apps/mastra (port 3002) ───── tools ─────────────────┘
+   │                          (semantic_search, list_chapters,
+   │                           get_chapter_summary, find_character_mentions)
+   └─── Mastra Memory  ──▶ Postgres (separate schema)
+```
+
+- **Citation contract** — the agent emits `{{cite:<chunk_id>}}` markers
+  (Feature 003 ADR-007, regex `CITATION_MARKER_REGEX` exported from
+  `@dialogus/rag`). The web app parses with a streaming-aware state machine
+  (Feature 004 ADR-008) so badges render as they arrive, not after stream
+  completion.
+- **Spoiler boundary** — chapter caps live in browser localStorage
+  (`dialogus:spoiler_cap:<thread_id>:<book_id>`, Feature 004 ADR-002). The
+  agent enforces the cap during retrieval; the UI exposes a per-book slider
+  in the thread header (ADR-005 locks the book scope at thread creation).
+- **Thread metadata** — primary path is Mastra Memory's `thread.metadata`
+  (rename + pin); a `thread_metadata` Drizzle table is the documented
+  fallback (Feature 004 ADR-007). Verification at task_01 chose the primary
+  path.
+- **Library polish** — `/library` is RSC + TanStack Query hydration (Feature
+  004 ADR-009); per-card progress polling at 2 s while ingestion is
+  in-progress; left-side `<Sheet>` for Gutendex add to differentiate from
+  the right-side citation panel (ADR-010).
+- **Accessibility** — Lighthouse a11y audited at ≥ 0.9 on `/` and `/library`
+  in CI; `@axe-core/playwright` runs inline against the same routes; full
+  keyboard navigation (arrow keys between messages, ⌘↵ to send, Esc to
+  dismiss panels).
+
+See `apps/web/README.md` for local Playwright + a11y test instructions and
+the [10 ADRs](.compozy/tasks/004-chat-ui/adrs/) for the complete design
+trail.
+
 ## API Problems
 
-The API surfaces errors as RFC 9457 Problem Details documents (`application/problem+json`) with a `urn:dialogus:problems:<slug>` type URI. The full inventory is regenerated by the feature-001 and feature-002 closure tasks; the slugs added by ingestion (feature 002) are listed below.
+The API surfaces errors as RFC 9457 Problem Details documents (`application/problem+json`) with a `urn:dialogus:problems:<slug>` type URI.
+
+### Catalog slugs (feature 001)
+
+| Slug | Default status | Notes |
+|---|---|---|
+| `duplicate-gutendex-id` | 409 | `POST /api/library/books` when the `gutendex_id` already exists; body includes `existing_book_id`. |
+| `book-not-found` | 404 | `GET /api/library/books/:id` for an unknown UUID. |
+| `gutendex-upstream-error` | 503 | Gutendex API returned a non-2xx response; retryable (`Retry-After: 60`). |
+| `gutendex-validation-failed` | 503 | Gutendex response failed Zod schema validation; includes `issues` array. |
+| `invalid-cursor` | 400 | `cursor` query parameter is not a valid base64url-encoded cursor payload. |
+| `idempotency-key-conflict` | 422 | Same `Idempotency-Key` was sent with a different request body. |
+| `validation-failed` | 400 | Zod validation failed on request body or query params; includes `issues` array. |
+| `internal-error` | 500 | Unexpected server error. |
+
+### Ingestion slugs (feature 002)
 
 | Slug | Default status | Notes |
 |---|---|---|
@@ -53,8 +176,38 @@ The API surfaces errors as RFC 9457 Problem Details documents (`application/prob
 | `book-already-ready` | 409 | `POST /api/library/books/:id/ingest/retry` rejected because the book is already `ready`. |
 | `ingestion-download-failed` | 503 | Gutenberg upstream failure during the `download` stage; retryable (`Retry-After: 60`). |
 | `ingestion-parse-failed` | 422 | EPUB malformed or no chapters detected during the `parse` stage. |
+| `ingestion-summarize-failed` | 503 | Summarisation step failed; retryable (`Retry-After: 60`). |
 | `ingestion-embed-failed` | 503 | OpenAI upstream failure during the `embed` stage; retryable (`Retry-After: 60`). |
 | `chunk-not-found` | 404 | `GET /api/library/chunks/:id` for an unknown chunk id. |
+
+## Catalog (feature 001)
+
+The catalog exposes two route groups under `apps/api`:
+
+- `GET /api/catalog/search` — proxied Gutendex search with cursor pagination and a 60-second LRU cache.
+- `POST /api/library/books` — add a book to the personal library (idempotent with `Idempotency-Key`).
+- `GET /api/library/books` — list books with cursor pagination and status/language filters.
+- `DELETE /api/library/books/:id` — soft-delete; `POST /api/library/books/:id/restore` reverses.
+
+### 4-command onboarding demo
+
+```bash
+# 1. Search Gutendex for Don Quixote
+curl -s "http://localhost:3001/api/catalog/search?q=don+quixote&limit=1" | jq '.data[0].id'
+
+# 2. Add to library with idempotency key (gutendex_id 996 = Don Quixote)
+curl -s -X POST http://localhost:3001/api/library/books \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: demo-add-1" \
+  -d '{"gutendex_id": 996}' | jq '{id: .data.id, title: .data.title, status: .data.ingestion_status}'
+
+# 3. List library (meta.count = total books)
+curl -s "http://localhost:3001/api/library/books?limit=5" | jq '{count: .meta.count, titles: [.data[].title]}'
+
+# 4. Soft-delete the book (replace <id> with the UUID from step 2)
+curl -s -X DELETE "http://localhost:3001/api/library/books/<id>"
+# → 204 No Content; GET /api/library/books now excludes it
+```
 
 ## Next steps
 

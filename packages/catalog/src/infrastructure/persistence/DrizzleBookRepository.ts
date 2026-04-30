@@ -63,19 +63,24 @@ export class DrizzleBookRepository implements BookRepository {
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined
-    const rows = (await this.db
-      .select()
-      .from(books)
-      .where(whereClause)
-      .orderBy(desc(books.createdAt), desc(books.id))
-      .limit(limitVal + 1)) as BookRow[]
+    const [rows, countRows] = await Promise.all([
+      this.db
+        .select()
+        .from(books)
+        .where(whereClause)
+        .orderBy(desc(books.createdAt), desc(books.id))
+        .limit(limitVal + 1) as Promise<BookRow[]>,
+      this.db.select({ count: sql<number>`count(*)::int` }).from(books).where(whereClause),
+    ])
 
     const hasNext = rows.length > limitVal
     const trimmed = hasNext ? rows.slice(0, limitVal) : rows
     const last = hasNext ? trimmed[trimmed.length - 1] : undefined
+    const total = countRows[0]?.count ?? 0
     return {
       books: trimmed.map(toDomain),
       nextCursor: last ? { createdAt: last.createdAt, id: last.id } : null,
+      total,
     }
   }
 

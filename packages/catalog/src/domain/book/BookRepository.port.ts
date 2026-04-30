@@ -15,6 +15,7 @@ export interface Cursor {
 export interface ListResult {
   books: Book[]
   nextCursor: Cursor | null
+  total: number
 }
 
 export interface BookRepository {

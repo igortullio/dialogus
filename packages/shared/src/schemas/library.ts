@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { bookDtoSchema } from './book.js'
-import { ingestionStatusEnum } from './ingestion.js'
+import { bookDtoSchema } from './book'
+import { ingestionStatusEnum } from './ingestion'
 
 export const LIBRARY_LANGUAGE_VALUES = ['en', 'pt'] as const
 export const libraryLanguageEnum = z.enum(LIBRARY_LANGUAGE_VALUES)

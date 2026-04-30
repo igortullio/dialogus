@@ -39,7 +39,7 @@ function fakeRepository(listResult: ListResult): BookRepository {
 
 describe('listLibrary', () => {
   it('returns the repository response unchanged for an empty filter and no cursor', async () => {
-    const result: ListResult = { books: [], nextCursor: null }
+    const result: ListResult = { books: [], nextCursor: null, total: 0 }
     const repository = fakeRepository(result)
 
     const out = await listLibrary({ repository }, { filter: {}, cursor: undefined })
@@ -52,6 +52,7 @@ describe('listLibrary', () => {
     const result: ListResult = {
       books: [makeBook({ id: 'a' }), makeBook({ id: 'b' })],
       nextCursor: { createdAt: new Date('2026-04-02T00:00:00Z'), id: 'b' },
+      total: 2,
     }
     const repository = fakeRepository(result)
     const cursor = { createdAt: new Date('2026-03-15T00:00:00Z'), id: 'prev-id' }
@@ -75,6 +76,7 @@ describe('listLibrary', () => {
     const result: ListResult = {
       books: [makeBook({ id: 'a' })],
       nextCursor: null,
+      total: 1,
     }
     const repository = fakeRepository(result)
 

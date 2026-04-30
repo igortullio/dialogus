@@ -21,4 +21,4 @@
 | 15 | apps/api pg-boss init + cleanup-idempotency-keys job | completed | medium | task_05, task_12 |
 | 16 | apps/web landing "livros: N" extension | completed | low | task_14 |
 | 17 | CI integration job with Testcontainers | completed | medium | task_12, task_13, task_14 |
-| 18 | Catalog smoke + closure | pending | medium | task_13, task_14, task_15, task_16, task_17 |
+| 18 | Catalog smoke + closure | completed | medium | task_13, task_14, task_15, task_16, task_17 |

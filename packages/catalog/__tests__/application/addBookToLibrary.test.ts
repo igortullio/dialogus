@@ -47,7 +47,7 @@ function fakeRepository(overrides: Partial<BookRepository> = {}): BookRepository
     save: vi.fn(async (book: Book) => book),
     findById: vi.fn(async () => null),
     findByGutendexId: vi.fn(async () => null),
-    list: vi.fn(async () => ({ books: [], nextCursor: null })),
+    list: vi.fn(async () => ({ books: [], nextCursor: null, total: 0 })),
     softDelete: vi.fn(async () => undefined),
     restore: vi.fn(async () => existingBook()),
     ...overrides,

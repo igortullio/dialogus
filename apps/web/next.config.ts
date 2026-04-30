@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  transpilePackages: ['@dialogus/shared', '@dialogus/catalog', '@dialogus/db'],
   typedRoutes: true,
   images: {
     remotePatterns: [

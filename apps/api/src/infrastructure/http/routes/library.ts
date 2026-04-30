@@ -100,7 +100,7 @@ export function createLibraryRoute(deps: LibraryRouteDeps): Hono {
       links.next = `${path}?cursor=${encodeCursor(result.nextCursor)}&limit=${query.limit}`
     }
     return c.json(
-      envelope(result.books.map(toBookDto), { meta: { count: result.books.length }, links }),
+      envelope(result.books.map(toBookDto), { meta: { count: result.total }, links }),
       200,
     )
   })

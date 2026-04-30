@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ingestionStatusEnum } from './ingestion.js'
+import { ingestionStatusEnum } from './ingestion'
 
 export const bookAuthorSchema = z.object({
   name: z.string(),

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { InvalidCursorError } from '../errors/index.js'
+import { InvalidCursorError } from '../errors/index'
 
 export interface CursorPosition {
   createdAt: Date

@@ -1,3 +1,3 @@
-export * from './cursor.js'
-export * from './envelope.js'
-export * from './problem.js'
+export * from './cursor'
+export * from './envelope'
+export * from './problem'

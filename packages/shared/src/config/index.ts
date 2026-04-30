@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { z } from 'zod'
-import { ConfigError } from '../errors/index.js'
+import { ConfigError } from '../errors/index'
 
 export function loadEnvFromRoot(startDir: string = process.cwd()): boolean {
   let dir = startDir

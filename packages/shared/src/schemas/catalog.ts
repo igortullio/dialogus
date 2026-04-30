@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { bookDtoSchema } from './book.js'
+import { bookDtoSchema } from './book'
 
 export const SEARCH_LANGUAGE_VALUES = ['en', 'pt'] as const
 export const searchLanguageEnum = z.enum(SEARCH_LANGUAGE_VALUES)

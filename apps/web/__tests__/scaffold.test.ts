@@ -70,7 +70,7 @@ describe('@dialogus/web package.json (Feature 004 scaffold)', () => {
   it('exposes dev/build/start/test/typecheck scripts with the expected commands', () => {
     const scripts = pkg.scripts as Record<string, string> | undefined
     expect(scripts).toBeDefined()
-    expect(scripts?.dev).toBe('next dev -p 3000')
+    expect(scripts?.dev).toBe('CHOKIDAR_USEPOLLING=1 next dev -p 3000')
     expect(scripts?.build).toBe('next build')
     expect(scripts?.start).toBe('next start -p 3000')
     expect(scripts?.test).toBe('vitest run')

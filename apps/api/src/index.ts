@@ -1,4 +1,7 @@
 import { pathToFileURL } from 'node:url'
+import { addBookToLibrary, getBook, listLibrary, removeBook, restoreBook } from '@dialogus/catalog'
+import { GutendexHttpClient } from '@dialogus/catalog/src/infrastructure/external/GutendexHttpClient'
+import { DrizzleBookRepository } from '@dialogus/catalog/src/infrastructure/persistence/DrizzleBookRepository'
 import { createDatabase, type Database } from '@dialogus/db'
 import { type DialogusEnv, loadConfig, loadEnvFromRoot } from '@dialogus/shared/config'
 import { type ServerType, serve } from '@hono/node-server'
@@ -9,7 +12,9 @@ import {
   type ProblemVariables,
 } from './infrastructure/http/middleware/problem'
 import { type RequestIdVariables, requestId } from './infrastructure/http/middleware/request-id'
+import { createCatalogRoute } from './infrastructure/http/routes/catalog'
 import { createHealthRoute } from './infrastructure/http/routes/health'
+import { createLibraryRoute } from './infrastructure/http/routes/library'
 
 const SHUTDOWN_TIMEOUT_MS = 10_000
 
@@ -23,6 +28,7 @@ export interface RouteMount {
 export interface StartOptions {
   logger?: Logger
   routes?: ReadonlyArray<RouteMount>
+  db?: Database
 }
 
 export interface BootResult {
@@ -56,7 +62,7 @@ export function createApiLogger(level: string): Logger {
 export async function start(options: StartOptions = {}): Promise<BootResult> {
   const config = loadConfig()
   const logger = options.logger ?? createApiLogger(config.LOG_LEVEL)
-  const db = createDatabase(config.DATABASE_URL)
+  const db = options.db ?? createDatabase(config.DATABASE_URL)
 
   const app = new Hono<{ Variables: BootVariables }>()
   app.use('*', requestId())
@@ -139,7 +145,31 @@ export function attachSignalHandlers(
 export async function main(): Promise<void> {
   try {
     loadEnvFromRoot()
-    const boot = await start()
+    const config = loadConfig()
+    const db = createDatabase(config.DATABASE_URL)
+
+    const repository = new DrizzleBookRepository(db)
+    const gutendexClient = new GutendexHttpClient()
+
+    const catalogApp = createCatalogRoute({ gutendexClient })
+    const libraryApp = createLibraryRoute({
+      db,
+      enqueueDeps: { databaseUrl: config.DATABASE_URL },
+      addBookToLibrary: (gutendexId) =>
+        addBookToLibrary({ repository, client: gutendexClient }, gutendexId),
+      listLibrary: (input) => listLibrary({ repository }, input),
+      getBook: (id) => getBook({ repository }, id),
+      removeBook: (id) => removeBook({ repository }, id),
+      restoreBook: (id) => restoreBook({ repository }, id),
+    })
+
+    const boot = await start({
+      db,
+      routes: [
+        { prefix: '/api/catalog', app: catalogApp },
+        { prefix: '/api/library', app: libraryApp },
+      ],
+    })
     attachSignalHandlers(boot)
   } catch (error) {
     const logger = createApiLogger('error')

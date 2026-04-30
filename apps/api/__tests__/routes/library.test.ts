@@ -62,7 +62,7 @@ function makeDeps(overrides: Partial<LibraryRouteDeps> = {}): LibraryRouteDeps {
     addBookToLibrary: vi.fn().mockResolvedValue(SAMPLE_BOOK),
     listLibrary: vi
       .fn()
-      .mockResolvedValue({ books: [SAMPLE_BOOK], nextCursor: null } satisfies ListResult),
+      .mockResolvedValue({ books: [SAMPLE_BOOK], nextCursor: null, total: 1 } satisfies ListResult),
     getBook: vi.fn().mockResolvedValue(SAMPLE_BOOK),
     removeBook: vi.fn().mockResolvedValue(undefined),
     restoreBook: vi.fn().mockResolvedValue(SAMPLE_BOOK),
@@ -188,7 +188,7 @@ describe('GET /library/books', () => {
     const nextCursor = { createdAt: new Date('2023-12-01T00:00:00.000Z'), id: BOOK_ID }
     const threeBooks = [SAMPLE_BOOK, SAMPLE_BOOK, SAMPLE_BOOK]
     const deps = makeDeps({
-      listLibrary: vi.fn().mockResolvedValue({ books: threeBooks, nextCursor }),
+      listLibrary: vi.fn().mockResolvedValue({ books: threeBooks, nextCursor, total: 3 }),
     })
     const app = buildApp(deps)
 
@@ -232,7 +232,7 @@ describe('GET /library/books', () => {
   it('builds valid next cursor that round-trips through encodeCursor', async () => {
     const nextCursor = { createdAt: new Date('2024-01-01T12:00:00.000Z'), id: BOOK_ID }
     const deps = makeDeps({
-      listLibrary: vi.fn().mockResolvedValue({ books: [SAMPLE_BOOK], nextCursor }),
+      listLibrary: vi.fn().mockResolvedValue({ books: [SAMPLE_BOOK], nextCursor, total: 1 }),
     })
     const app = buildApp(deps)
 

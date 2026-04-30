@@ -221,8 +221,8 @@ describe('DrizzleBookRepository.list', () => {
     const { db, calls } = makeMockDb({ selectRows: [] })
     const repo = new DrizzleBookRepository(db)
     await repo.list({}, undefined, 20)
-    expect(calls.select).toHaveBeenCalledTimes(1)
-    expect(calls.selectChain.from).toHaveBeenCalledTimes(1)
+    expect(calls.select).toHaveBeenCalledTimes(2)
+    expect(calls.selectChain.from).toHaveBeenCalledTimes(2)
     expect(calls.selectChain.orderBy).toHaveBeenCalledTimes(1)
     expect(calls.selectChain.limit).toHaveBeenCalledWith(21)
   })
@@ -231,7 +231,7 @@ describe('DrizzleBookRepository.list', () => {
     const { db, calls } = makeMockDb({ selectRows: [] })
     const repo = new DrizzleBookRepository(db)
     await repo.list({})
-    expect(calls.selectChain.where).toHaveBeenCalledTimes(1)
+    expect(calls.selectChain.where).toHaveBeenCalledTimes(2)
     const where = calls.selectChain.where.mock.calls[0]?.[0]
     expect(where).toBeDefined()
   })
@@ -240,7 +240,7 @@ describe('DrizzleBookRepository.list', () => {
     const { db, calls } = makeMockDb({ selectRows: [] })
     const repo = new DrizzleBookRepository(db)
     await repo.list({ includeDeleted: true })
-    expect(calls.selectChain.where).toHaveBeenCalledTimes(1)
+    expect(calls.selectChain.where).toHaveBeenCalledTimes(2)
     expect(calls.selectChain.where.mock.calls[0]?.[0]).toBeUndefined()
   })
 

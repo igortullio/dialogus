@@ -6,6 +6,7 @@ import { createDatabase, type Database } from '@dialogus/db'
 import { type DialogusEnv, loadConfig, loadEnvFromRoot } from '@dialogus/shared/config'
 import { type ServerType, serve } from '@hono/node-server'
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { type Logger, pino, stdSerializers } from 'pino'
 import {
   createProblemMiddleware,
@@ -65,6 +66,15 @@ export async function start(options: StartOptions = {}): Promise<BootResult> {
   const db = options.db ?? createDatabase(config.DATABASE_URL)
 
   const app = new Hono<{ Variables: BootVariables }>()
+  app.use(
+    '*',
+    cors({
+      origin: config.WEB_ORIGIN,
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowHeaders: ['Content-Type', 'Idempotency-Key', 'Authorization'],
+      maxAge: 600,
+    }),
+  )
   app.use('*', requestId())
   app.use('*', createProblemMiddleware({ logger }))
   app.route('/health', createHealthRoute({ db, mastraUrl: config.NEXT_PUBLIC_MASTRA_URL }))

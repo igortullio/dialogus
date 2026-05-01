@@ -48,7 +48,8 @@ export function pickModelId(env: DialogusEnv): DialogusAgentModelId {
 }
 
 function pickQueryEmbedder(env: DialogusEnv): QueryEmbedder {
-  if (env.NODE_ENV === 'test') return new MockQueryEmbedder()
+  if (env.NODE_ENV === 'test' || process.env.EMBEDDING_PROVIDER === 'mock')
+    return new MockQueryEmbedder()
   return new OpenAIQueryEmbedder({ apiKey: env.OPENAI_API_KEY })
 }
 
@@ -79,6 +80,7 @@ export function buildMastra(options: BuildMastraOptions = {}): BuildMastraResult
   const mastra = new Mastra({
     storage,
     agents: { [DIALOGUS_AGENT_ID]: dialogusAgent },
+    server: { port: env.MASTRA_PORT },
   })
 
   return { mastra, env, logger }

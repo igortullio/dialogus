@@ -28,7 +28,7 @@ export interface GutendexDownloaderOptions {
   readonly sleep?: (ms: number) => Promise<void>
 }
 
-const DEFAULT_BASE_URL = 'https://aleph.gutenberg.org'
+const DEFAULT_BASE_URL = 'https://www.gutenberg.org'
 const DEFAULT_USER_AGENT = 'dIAlogus/0.1 (+igortullio@gmail.com)'
 const DEFAULT_STORAGE_DIR = './storage/raw'
 const DEFAULT_MAX_RETRIES = 2
@@ -92,8 +92,8 @@ export class GutendexDownloader {
   private buildUrl(gutendexId: number, format: DownloadFormat): string {
     const path =
       format === 'epub'
-        ? `/cache/epub/${gutendexId}/pg${gutendexId}.epub.noimages`
-        : `/cache/epub/${gutendexId}/pg${gutendexId}.txt.utf8`
+        ? `/cache/epub/${gutendexId}/pg${gutendexId}.epub`
+        : `/cache/epub/${gutendexId}/pg${gutendexId}.txt`
     return `${this.baseUrl}${path}`
   }
 

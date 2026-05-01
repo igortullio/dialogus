@@ -31,7 +31,7 @@ const FIXTURE_EPUB_PATH = new URL(
   import.meta.url,
 )
 const GUTENDEX_ID = 400500
-const EPUB_URL = `https://aleph.gutenberg.org/cache/epub/${GUTENDEX_ID}/pg${GUTENDEX_ID}.epub.noimages`
+const EPUB_URL = `https://www.gutenberg.org/cache/epub/${GUTENDEX_ID}/pg${GUTENDEX_ID}.epub`
 
 describe.skipIf(!dockerAvailable)('GET /api/library/chunks/:id', () => {
   let pg: PostgresContext

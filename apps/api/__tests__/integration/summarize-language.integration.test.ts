@@ -30,8 +30,8 @@ const FIXTURE_PT_EPUB = new URL(
 
 const EN_GUTENDEX_ID = 800001
 const PT_GUTENDEX_ID = 800002
-const EN_EPUB_URL = `https://aleph.gutenberg.org/cache/epub/${EN_GUTENDEX_ID}/pg${EN_GUTENDEX_ID}.epub.noimages`
-const PT_EPUB_URL = `https://aleph.gutenberg.org/cache/epub/${PT_GUTENDEX_ID}/pg${PT_GUTENDEX_ID}.epub.noimages`
+const EN_EPUB_URL = `https://www.gutenberg.org/cache/epub/${EN_GUTENDEX_ID}/pg${EN_GUTENDEX_ID}.epub`
+const PT_EPUB_URL = `https://www.gutenberg.org/cache/epub/${PT_GUTENDEX_ID}/pg${PT_GUTENDEX_ID}.epub`
 
 describe.skipIf(!dockerAvailable)(
   'summarize stage — language flows from books.languages[0] to generator',

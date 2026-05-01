@@ -22,7 +22,7 @@ import {
 import { generateLargeBook } from './fixtures/generate-large-book'
 
 const GUTENDEX_ID = 300077
-const TXT_URL = `https://aleph.gutenberg.org/cache/epub/${GUTENDEX_ID}/pg${GUTENDEX_ID}.txt.utf8`
+const TXT_URL = `https://www.gutenberg.org/cache/epub/${GUTENDEX_ID}/pg${GUTENDEX_ID}.txt`
 
 /**
  * ADR-004 streaming discipline: the synthetic 400k-token book inflates to ~3 MB of

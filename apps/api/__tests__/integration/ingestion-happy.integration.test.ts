@@ -25,7 +25,7 @@ const FIXTURE_EPUB_PATH = new URL(
 )
 
 const GUTENDEX_ID = 100015
-const EPUB_URL = `https://aleph.gutenberg.org/cache/epub/${GUTENDEX_ID}/pg${GUTENDEX_ID}.epub.noimages`
+const EPUB_URL = `https://www.gutenberg.org/cache/epub/${GUTENDEX_ID}/pg${GUTENDEX_ID}.epub`
 
 describe.skipIf(!dockerAvailable)('ingestion happy path — full 7-stage pipeline', () => {
   let pg: PostgresContext

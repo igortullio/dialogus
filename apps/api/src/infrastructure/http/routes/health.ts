@@ -4,7 +4,7 @@ import { healthResponseSchema } from '@dialogus/shared/schemas/health'
 import { Hono } from 'hono'
 
 const DEFAULT_MASTRA_PROBE_TIMEOUT_MS = 1000
-const MASTRA_HEALTH_PATH = '/api/health'
+const MASTRA_HEALTH_PATH = '/health'
 
 export type FetchLike = (input: string, init?: { signal?: AbortSignal }) => Promise<{ ok: boolean }>
 

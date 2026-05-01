@@ -35,7 +35,7 @@ import {
 import { generateLargeBook } from './fixtures/generate-large-book'
 
 const GUTENDEX_ID = 200042
-const TXT_URL = `https://aleph.gutenberg.org/cache/epub/${GUTENDEX_ID}/pg${GUTENDEX_ID}.txt.utf8`
+const TXT_URL = `https://www.gutenberg.org/cache/epub/${GUTENDEX_ID}/pg${GUTENDEX_ID}.txt`
 
 class FailOnceSummaryGenerator implements ChapterSummaryGenerator {
   readonly callOrdinals: number[] = []

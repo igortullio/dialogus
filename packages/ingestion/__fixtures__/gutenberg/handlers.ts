@@ -11,14 +11,14 @@ export const SAMPLE_TXT_PATH = join(here, 'sample.txt')
 export const FIXTURE_BOOK_ID = 15
 export const MISSING_BOOK_ID = 999
 
-export const BASE_URL = 'https://aleph.gutenberg.org'
+export const BASE_URL = 'https://www.gutenberg.org'
 
 export function epubUrl(id: number): string {
-  return `${BASE_URL}/cache/epub/${id}/pg${id}.epub.noimages`
+  return `${BASE_URL}/cache/epub/${id}/pg${id}.epub`
 }
 
 export function txtUrl(id: number): string {
-  return `${BASE_URL}/cache/epub/${id}/pg${id}.txt.utf8`
+  return `${BASE_URL}/cache/epub/${id}/pg${id}.txt`
 }
 
 export const happyPathHandlers = [

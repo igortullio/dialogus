@@ -5,7 +5,6 @@ import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AssistantChatTransport, useChatRuntime } from '@assistant-ui/react-ai-sdk'
 import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { mastraBaseUrl } from '@/lib/api/_envelope'
 import { readAllSpoilerCaps } from '@/lib/spoiler-cap'
 import { cn } from '@/lib/utils'
 import { openAddBookDrawer } from './add-book-drawer-store'
@@ -67,7 +66,7 @@ export function DialogusThread({
   const transport = useMemo(
     () =>
       new AssistantChatTransport<UIMessage>({
-        api: `${mastraBaseUrl().replace(/\/+$/, '')}${STREAM_PATH}`,
+        api: STREAM_PATH,
         prepareSendMessagesRequest: ({ messages, body }) => {
           const { threadId: currentThreadId, bookIds: currentBookIds } = sendStateRef.current
           const lastMessage = messages[messages.length - 1]
@@ -75,6 +74,7 @@ export function DialogusThread({
           const spoiler_caps = currentThreadId !== null ? readAllSpoilerCaps(currentThreadId) : {}
           const requestBody: Record<string, unknown> = {
             ...(body ?? {}),
+            messages: messages.map((m) => ({ role: m.role, content: extractMessageText(m) })),
             message: messageText,
             book_ids: currentBookIds,
             spoiler_caps,

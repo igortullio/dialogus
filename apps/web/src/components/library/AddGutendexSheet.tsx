@@ -98,6 +98,33 @@ interface ResultRowProps {
   onAdd(): void
 }
 
+interface ResultCoverProps {
+  readonly book: GutendexBook
+}
+
+function ResultCover({ book }: ResultCoverProps) {
+  const [failed, setFailed] = useState(false)
+  // Reset on cover_url change so a different row reusing this slot retries.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dep is the reset trigger
+  useEffect(() => {
+    setFailed(false)
+  }, [book.cover_url])
+  if (!book.cover_url || failed) {
+    return <CoverFallback title={book.title} author={book.authors[0]?.name} />
+  }
+  return (
+    // biome-ignore lint/performance/noImgElement: third-party covers may be unsupported by next/image
+    <img
+      src={book.cover_url}
+      alt={`Capa de '${book.title}'`}
+      data-slot="add-gutendex-row-cover"
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="aspect-[2/3] w-full rounded-md border bg-muted object-cover"
+    />
+  )
+}
+
 function ResultRow({ book, state, onAdd }: ResultRowProps) {
   const isPending = state.status === 'pending'
   const isAdded = state.status === 'added'
@@ -112,18 +139,7 @@ function ResultRow({ book, state, onAdd }: ResultRowProps) {
       className="flex gap-3 rounded-md border bg-card p-3"
     >
       <div className="w-16 shrink-0">
-        {book.cover_url ? (
-          // biome-ignore lint/performance/noImgElement: third-party covers may be unsupported by next/image
-          <img
-            src={book.cover_url}
-            alt={`Capa de '${book.title}'`}
-            data-slot="add-gutendex-row-cover"
-            loading="lazy"
-            className="aspect-[2/3] w-full rounded-md border bg-muted object-cover"
-          />
-        ) : (
-          <CoverFallback title={book.title} author={book.authors[0]?.name} />
-        )}
+        <ResultCover book={book} />
       </div>
       <div className="flex flex-1 flex-col gap-1">
         <h3

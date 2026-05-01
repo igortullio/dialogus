@@ -4,11 +4,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { Thread } from '@/lib/api/_schemas'
 import { deleteThread } from '@/lib/api/threads'
+import { THREADS_QUERY_KEY } from '@/lib/query-keys'
 import { clearSpoilerCapsForThread } from '@/lib/spoiler-cap'
 
 const ROLLBACK_TOAST_MESSAGE = 'Não foi possível excluir a conversa.'
 
-export const THREADS_QUERY_KEY = ['threads'] as const
+export { THREADS_QUERY_KEY }
 
 interface DeleteContext {
   readonly previous: Thread[] | undefined

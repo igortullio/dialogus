@@ -46,13 +46,15 @@ interface CoverProps {
 }
 
 function Cover({ book }: CoverProps) {
-  if (book.cover_url) {
+  const [failed, setFailed] = useState(false)
+  if (book.cover_url && !failed) {
     return (
       <img
         src={book.cover_url}
         alt={`Capa de '${book.title}'`}
         data-slot="book-card-cover"
         loading="lazy"
+        onError={() => setFailed(true)}
         className="aspect-[2/3] w-full rounded-md border bg-muted object-cover"
       />
     )

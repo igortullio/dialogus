@@ -25,7 +25,7 @@ interface ReadyBooksQueryResult {
 }
 
 async function queryReadyBooks(): Promise<ReadyBooksQueryResult> {
-  const result = await fetchLibrary({ status: 'ready', limit: 100 })
+  const result = await fetchLibrary({ status: 'ready', limit: 32 })
   return { books: result.books }
 }
 

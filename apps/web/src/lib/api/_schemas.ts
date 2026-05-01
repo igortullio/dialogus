@@ -18,7 +18,7 @@ export const bookSchema = z.object({
   download_url_epub: z.string().url().nullable(),
   download_url_txt: z.string().url().nullable(),
   cover_url: z.string().url().nullable(),
-  raw_hash: z.string().nullable(),
+  raw_hash: z.string().nullable().optional(),
   ingestion_status: ingestionStatusEnum,
   ingestion_error: z.string().nullable(),
   tags: z.array(z.string()),

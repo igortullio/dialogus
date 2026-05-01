@@ -135,11 +135,12 @@ export function DialogusLanding() {
           <DialogusThread key={activeThreadId ?? 'new'} threadId={activeThreadId}>
             <ThreadHeader />
             <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-4">
-              {activeThreadId === null ? (
+              <ThreadPrimitive.If empty>
                 <EmptyChatMain />
-              ) : (
+              </ThreadPrimitive.If>
+              <ThreadPrimitive.If empty={false}>
                 <ThreadPrimitive.Messages components={{ Message: DialogusMessageAdapter }} />
-              )}
+              </ThreadPrimitive.If>
             </ThreadPrimitive.Viewport>
             <DialogusComposer />
           </DialogusThread>

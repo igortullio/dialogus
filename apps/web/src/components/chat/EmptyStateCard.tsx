@@ -3,11 +3,20 @@
 import type { IngestionStatusDto } from '@dialogus/shared/schemas/ingestion'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CoverFallback } from '@/components/library/CoverFallback'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { addBook, fetchIngestionStatus, startIngestion } from '@/lib/api/library'
+import type { Book } from '@/lib/api/_schemas'
+import {
+  addBook,
+  type FetchLibraryResult,
+  fetchIngestionStatus,
+  fetchLibrary,
+  startIngestion,
+} from '@/lib/api/library'
 import { ONBOARDING_TITLES, type OnboardingTitle } from '@/lib/onboarding-titles'
+import { LIBRARY_QUERY_KEY } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 
 const POLL_INTERVAL_MS = 2000
@@ -36,11 +45,35 @@ function languageFlag(language: 'en' | 'pt'): string {
 
 interface OnboardingBookCardProps {
   readonly title: OnboardingTitle
+  readonly existingBook: Book | null
   onReady(gutendexId: number): void
 }
 
-function OnboardingBookCard({ title, onReady }: OnboardingBookCardProps) {
-  const [state, setState] = useState<CardRuntimeState>(INITIAL_STATE)
+function deriveStateFromBook(book: Book): CardRuntimeState {
+  if (book.ingestion_status === 'ready') {
+    return { phase: 'ready', bookId: book.id, error: null }
+  }
+  if (book.ingestion_status === 'failed') {
+    return {
+      phase: 'error',
+      bookId: book.id,
+      error: book.ingestion_error ?? 'Falha na ingestão.',
+    }
+  }
+  return { phase: 'ingesting', bookId: book.id, error: null }
+}
+
+function OnboardingBookCard({ title, existingBook, onReady }: OnboardingBookCardProps) {
+  const [state, setState] = useState<CardRuntimeState>(() =>
+    existingBook ? deriveStateFromBook(existingBook) : INITIAL_STATE,
+  )
+  const [coverFailed, setCoverFailed] = useState(false)
+
+  // Seed from library data when it arrives after first render.
+  useEffect(() => {
+    if (!existingBook || state.phase !== 'idle') return
+    setState(deriveStateFromBook(existingBook))
+  }, [existingBook, state.phase])
 
   const onClick = useCallback(async () => {
     setState({ phase: 'adding', bookId: null, error: null })
@@ -89,6 +122,11 @@ function OnboardingBookCard({ title, onReady }: OnboardingBookCardProps) {
     }
   }, [state.phase, state.bookId, ingestionStatus, ingestionErrorMessage, onReady, title.gutendexId])
 
+  // Notify parent when card boots already in 'ready' (book already in library).
+  useEffect(() => {
+    if (state.phase === 'ready') onReady(title.gutendexId)
+  }, [state.phase, onReady, title.gutendexId])
+
   return (
     <Card
       data-slot="onboarding-book-card"
@@ -97,16 +135,18 @@ function OnboardingBookCard({ title, onReady }: OnboardingBookCardProps) {
       className="flex h-full flex-col"
     >
       <CardContent className="flex flex-1 flex-col gap-3 p-4">
-        <div
-          aria-hidden
-          data-slot="onboarding-book-cover"
-          className={cn(
-            'flex aspect-[3/4] items-center justify-center rounded-md',
-            'bg-muted text-muted-foreground font-mono text-2xl',
-          )}
-        >
-          {title.title.charAt(0)}
-        </div>
+        {coverFailed ? (
+          <CoverFallback title={title.title} author={title.author} />
+        ) : (
+          <img
+            src={title.coverUrl}
+            alt={`Capa de '${title.title}'`}
+            data-slot="onboarding-book-cover"
+            loading="lazy"
+            onError={() => setCoverFailed(true)}
+            className="aspect-[3/4] w-full rounded-md border bg-muted object-cover"
+          />
+        )}
         <div className="flex flex-col gap-1">
           <span className="font-medium leading-tight">{title.title}</span>
           <span className="text-muted-foreground text-xs leading-tight">{title.author}</span>
@@ -203,6 +243,19 @@ export interface EmptyStateCardProps {
 export function EmptyStateCard({ className }: EmptyStateCardProps) {
   const [readyIds, setReadyIds] = useState<ReadonlySet<number>>(new Set())
 
+  const library = useQuery<FetchLibraryResult>({
+    queryKey: LIBRARY_QUERY_KEY,
+    queryFn: () => fetchLibrary({ limit: 32 }),
+  })
+
+  const booksByGutendexId = useMemo(() => {
+    const map = new Map<number, Book>()
+    for (const book of library.data?.books ?? []) {
+      map.set(book.gutendex_id, book)
+    }
+    return map
+  }, [library.data])
+
   const onReady = useCallback((gutendexId: number) => {
     setReadyIds((previous) => {
       if (previous.has(gutendexId)) return previous
@@ -242,10 +295,14 @@ export function EmptyStateCard({ className }: EmptyStateCardProps) {
     >
       <h2 className="font-medium text-base">{HEADING_COPY}</h2>
       <p className="mt-1 text-muted-foreground text-sm">{SUBHEADING_COPY}</p>
-      <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <ul className="mt-3 flex flex-col gap-3">
         {ONBOARDING_TITLES.map((title) => (
           <li key={`onboarding-${title.gutendexId}`} className="contents">
-            <OnboardingBookCard title={title} onReady={onReady} />
+            <OnboardingBookCard
+              title={title}
+              existingBook={booksByGutendexId.get(title.gutendexId) ?? null}
+              onReady={onReady}
+            />
           </li>
         ))}
       </ul>

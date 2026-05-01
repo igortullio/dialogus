@@ -10,9 +10,10 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { Book } from '@/lib/api/_schemas'
 import { type FetchLibraryResult, fetchLibrary } from '@/lib/api/library'
+import { LIBRARY_QUERY_KEY } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 
-export const LIBRARY_QUERY_KEY = ['library'] as const
+export { LIBRARY_QUERY_KEY }
 
 const PAGE_HEADING = 'Gerenciar acervo'
 const PAGE_SUBHEADING = 'Seus livros prontos para conversa.'

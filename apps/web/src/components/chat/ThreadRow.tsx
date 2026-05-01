@@ -21,8 +21,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import { THREADS_QUERY_KEY, useThreadCleanup } from '@/hooks/useThreadCleanup'
+import { useThreadCleanup } from '@/hooks/useThreadCleanup'
 import type { Thread } from '@/lib/api/_schemas'
+import { THREADS_QUERY_KEY } from '@/lib/query-keys'
 import { useThreadMetadata } from '@/lib/thread-metadata'
 import { cn } from '@/lib/utils'
 

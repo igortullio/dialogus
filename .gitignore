@@ -26,3 +26,4 @@ test-results/
 
 # Worker runtime storage (downloaded books / cleaned text)
 apps/worker/storage/
+/storage/

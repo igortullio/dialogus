@@ -1,8 +1,8 @@
 'use client'
 
-import { ComposerPrimitive, useThread } from '@assistant-ui/react'
+import { ComposerPrimitive, useAui, useAuiState, useThread } from '@assistant-ui/react'
 import { SendHorizonal, Square } from 'lucide-react'
-import type { ReactElement } from 'react'
+import { type FormEvent, type KeyboardEvent, type ReactElement, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -49,7 +49,7 @@ export function DialogusComposer({
             <span className="text-muted-foreground text-xs">Trocar livros = nova conversa</span>
           )}
         </div>
-        <ComposerPrimitive.Input
+        <UncontrolledComposerInput
           aria-label="Mensagem"
           placeholder={placeholder}
           disabled={composerDisabled}
@@ -114,6 +114,72 @@ function renderCancelButton(isRunning: boolean): ReactElement | null {
         Parar
       </Button>
     </ComposerPrimitive.Cancel>
+  )
+}
+
+interface UncontrolledComposerInputProps {
+  readonly className?: string
+  readonly placeholder?: string
+  readonly disabled?: boolean
+  readonly submitMode?: 'enter' | 'ctrlEnter' | 'none'
+  readonly 'aria-label'?: string
+}
+
+/**
+ * Uncontrolled replacement for ComposerPrimitive.Input.
+ * Avoids the IME bug where the controlled `value` prop conflicts with
+ * macOS dead-key composition (typing accents) and freezes the textarea.
+ * Syncs DOM ↔ store via ref + useEffect, only forcing a DOM update when
+ * the store text diverges (e.g., reset to '' after send).
+ */
+function UncontrolledComposerInput({
+  className,
+  placeholder,
+  disabled,
+  submitMode = 'enter',
+  'aria-label': ariaLabel,
+}: UncontrolledComposerInputProps) {
+  const aui = useAui()
+  const ref = useRef<HTMLTextAreaElement>(null)
+  const storeText = useAuiState((s) => (s.composer.isEditing ? s.composer.text : '')) as string
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return
+    if (node.value !== storeText) {
+      node.value = storeText
+    }
+  }, [storeText])
+
+  const handleInput = (e: FormEvent<HTMLTextAreaElement>) => {
+    aui.composer().setText(e.currentTarget.value)
+  }
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return
+    if (e.key !== 'Enter') return
+    if (e.shiftKey) return
+    let shouldSubmit = false
+    if (submitMode === 'ctrlEnter') shouldSubmit = e.ctrlKey || e.metaKey
+    else if (submitMode === 'enter') shouldSubmit = true
+    if (shouldSubmit) {
+      e.preventDefault()
+      ref.current?.closest('form')?.requestSubmit()
+    }
+  }
+
+  return (
+    <textarea
+      ref={ref}
+      defaultValue=""
+      placeholder={placeholder}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onInput={handleInput}
+      onKeyDown={handleKeyDown}
+      data-slot="dialogus-composer-input"
+      className={className}
+    />
   )
 }
 

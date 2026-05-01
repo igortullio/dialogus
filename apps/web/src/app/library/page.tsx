@@ -1,6 +1,7 @@
 import { dehydrate, HydrationBoundary, QueryClient } from '@tanstack/react-query'
 import { type FetchLibraryResult, fetchLibrary } from '@/lib/api/library'
-import { LIBRARY_QUERY_KEY, LibraryGrid } from './LibraryGrid'
+import { LIBRARY_QUERY_KEY } from '@/lib/query-keys'
+import { LibraryGrid } from './LibraryGrid'
 
 export default async function LibraryPage() {
   const queryClient = new QueryClient()

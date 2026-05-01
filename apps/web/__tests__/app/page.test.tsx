@@ -21,12 +21,13 @@ vi.mock('../../src/lib/library', () => ({
 
 const { listThreads } = await import('../../src/lib/api/threads')
 const { fetchHealth } = await import('../../src/lib/health')
-const { fetchLibraryCount } = await import('../../src/lib/library')
+const { fetchLibraryCount, fetchLibraryCountByStatus } = await import('../../src/lib/library')
 const { default: Page } = await import('../../src/app/page')
 
 const mockedListThreads = vi.mocked(listThreads)
 const mockedFetchHealth = vi.mocked(fetchHealth)
 const mockedFetchLibraryCount = vi.mocked(fetchLibraryCount)
+const mockedFetchLibraryCountByStatus = vi.mocked(fetchLibraryCountByStatus)
 
 const HEALTH_UP = { api: 'up', db: 'up', pgboss: 'up', mastra: 'up' } as const
 
@@ -37,6 +38,8 @@ beforeEach(() => {
   mockedFetchHealth.mockResolvedValue(HEALTH_UP)
   mockedFetchLibraryCount.mockReset()
   mockedFetchLibraryCount.mockResolvedValue(0)
+  mockedFetchLibraryCountByStatus.mockReset()
+  mockedFetchLibraryCountByStatus.mockResolvedValue({ ready: 0, total: 0 })
 })
 
 afterEach(() => {
@@ -76,17 +79,17 @@ describe('apps/web landing Page (Server Component shell)', () => {
   it('fetches health and library count in parallel before rendering', async () => {
     await Page()
     expect(mockedFetchHealth).toHaveBeenCalledTimes(1)
-    expect(mockedFetchLibraryCount).toHaveBeenCalledTimes(1)
+    expect(mockedFetchLibraryCountByStatus).toHaveBeenCalledTimes(1)
   })
 
-  it('renders "livros: 3" in the status line when count is 3', async () => {
-    mockedFetchLibraryCount.mockResolvedValueOnce(3)
+  it('renders "livros: 3 (prontos: 3)" in the status line when 3 books are ready', async () => {
+    mockedFetchLibraryCountByStatus.mockResolvedValueOnce({ ready: 3, total: 3 })
     const tree = await Page()
-    expect(JSON.stringify(tree)).toContain('livros: 3')
+    expect(JSON.stringify(tree)).toContain('livros: 3 (prontos: 3)')
   })
 
-  it('renders "livros: 0" in the status line when library count fetch fails (returns 0)', async () => {
-    mockedFetchLibraryCount.mockResolvedValueOnce(0)
+  it('renders "livros: 0" in the status line when library count fetch returns 0 ready', async () => {
+    mockedFetchLibraryCountByStatus.mockResolvedValueOnce({ ready: 0, total: 0 })
     const tree = await Page()
     expect(JSON.stringify(tree)).toContain('livros: 0')
   })

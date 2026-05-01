@@ -10,6 +10,7 @@ import { type Thread, threadListSchema, threadSchema } from './_schemas'
 
 const FALLBACK_BASE = '/api/library/threads'
 const MASTRA_BASE = '/api/memory/threads'
+const MASTRA_AGENT_ID = 'dialogusAgent'
 const DEFAULT_METADATA: ThreadMetadata = { custom_title: null, pinned: false }
 
 const useMastra: boolean = MASTRA_THREAD_METADATA_AVAILABLE
@@ -93,7 +94,12 @@ export async function listThreads(): Promise<Thread[]> {
 
 export async function deleteThread(id: string): Promise<void> {
   if (useMastra) {
-    await mastraFetch(`${MASTRA_BASE}/${id}`, { method: 'DELETE' }, () => undefined, 'deleteThread')
+    await mastraFetch(
+      `${MASTRA_BASE}/${id}?agentId=${MASTRA_AGENT_ID}`,
+      { method: 'DELETE' },
+      () => undefined,
+      'deleteThread',
+    )
     return
   }
   await fetchVoid(apiBaseUrl(), `${FALLBACK_BASE}/${id}`, {
@@ -105,7 +111,7 @@ export async function deleteThread(id: string): Promise<void> {
 export async function fetchThreadMetadata(id: string): Promise<ThreadMetadata> {
   if (useMastra) {
     const thread = await mastraFetch(
-      `${MASTRA_BASE}/${id}`,
+      `${MASTRA_BASE}/${id}?agentId=${MASTRA_AGENT_ID}`,
       { method: 'GET' },
       parseThread,
       'fetchThreadMetadata',
@@ -126,7 +132,7 @@ export async function updateThreadMetadata(
   if (useMastra) {
     const merged: ThreadMetadata = { ...DEFAULT_METADATA, ...partial }
     const thread = await mastraFetch(
-      `${MASTRA_BASE}/${id}`,
+      `${MASTRA_BASE}/${id}?agentId=${MASTRA_AGENT_ID}`,
       {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },

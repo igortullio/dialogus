@@ -46,6 +46,10 @@ if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !=
   Element.prototype.scrollIntoView = vi.fn()
 }
 
+if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.scrollTo !== 'function') {
+  HTMLElement.prototype.scrollTo = vi.fn()
+}
+
 if (typeof Element !== 'undefined' && typeof Element.prototype.hasPointerCapture !== 'function') {
   Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false)
 }

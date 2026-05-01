@@ -68,7 +68,9 @@ describe('threads client (Mastra primary path)', () => {
     await deleteThread('t_thread_1')
     const init = fetchMock.mock.calls[0]?.[1]
     expect(init?.method).toBe('DELETE')
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${MASTRA_BASE}/api/memory/threads/t_thread_1`)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `${MASTRA_BASE}/api/memory/threads/t_thread_1?agentId=dialogusAgent`,
+    )
   })
 
   it('updateThreadMetadata() PATCHes Mastra with merged { custom_title, pinned } body', async () => {

@@ -112,9 +112,11 @@ describe('DialogusLanding (chat-first landing)', () => {
     })
     // Desktop sidebar rendered (CSS-hidden on small screens but in DOM)
     expect(document.querySelector('[data-slot="dialogus-desktop-sidebar"]')).not.toBeNull()
-    // Empty main copy is visible
-    expect(screen.getByText('Selecione uma conversa ou comece uma nova')).toBeDefined()
-    expect(document.querySelector('[data-slot="empty-chat-main"]')).not.toBeNull()
+    // Empty main copy is visible — ThreadPrimitive.If renders reactively so wrap in waitFor
+    await waitFor(() => {
+      expect(screen.getByText('Selecione uma conversa ou comece uma nova')).toBeDefined()
+      expect(document.querySelector('[data-slot="empty-chat-main"]')).not.toBeNull()
+    })
     // Composer is mounted (BookPicker active because no existing thread)
     expect(document.querySelector('[data-slot="dialogus-composer"]')).not.toBeNull()
   })

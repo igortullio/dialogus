@@ -16,6 +16,6 @@
 | 10 | CI integration job extension | completed | low | task_09 |
 | 11 | cURL smoke scripts + apps/mastra README | completed | low | task_08 |
 | 12 | System prompt validation (≥10 owner-posed questions) | completed | low | task_08, task_11 |
-| 13 | Feature 003 closure (README, annotations, commit) | pending | low | task_10, task_12 |
+| 13 | Feature 003 closure (README, annotations, commit) | completed | low | task_10, task_12 |
 
 **External prerequisite:** Feature 002 task_24 (worker registration for `summarize` queue + integration suite extension) must be merged before task_01 of this feature starts. Without it, `chapter_summaries` is an unmigrated table and `get_chapter_summary` has no data to read.

@@ -244,6 +244,87 @@ curl -s "http://localhost:3001/api/library/chunks/<chunk_id>" \
 
 > `OPENAI_API_KEY` is required for the embed stage. Set `EMBEDDING_PROVIDER=mock` in `.env` during development to skip real OpenAI calls and use deterministic unit-vector embeddings instead. The summarize stage uses `ANTHROPIC_API_KEY`; set `SUMMARY_GENERATOR=mock` to bypass it.
 
+## RAG Agent (feature 003)
+
+`dialogusAgent` is the conversational core of dIAlogus — a Mastra-hosted Claude agent
+that answers grounded questions about ingested classics, cites exact passages, respects
+per-book spoiler caps, and refuses to speculate when retrieval returns nothing relevant.
+
+### Boot
+
+`pnpm dev` starts the Mastra Dev Server on `:3002` alongside the API, worker, and web
+app. Studio runs at `:4111`. To boot the agent in isolation:
+
+```sh
+docker compose up -d && pnpm db:migrate
+pnpm --filter @dialogus/mastra dev
+open http://localhost:4111   # Mastra Studio — threads, tool calls, token accounting
+```
+
+### Architecture
+
+```
+User question + { book_ids, spoiler_caps }
+   │  POST /api/agents/dialogusAgent/stream
+   ▼
+apps/mastra (port 3002) ── Claude Haiku 4.5 (dev) / Sonnet 4.6 (prod)
+   │  system-prompt cache hit (Anthropic prompt caching)
+   │
+   │  four read-only tool calls ──────────────────────────────▶ Postgres 18
+   │    semantic_search        HNSW cosine, chapter-capped      chunks + embeddings
+   │    list_chapters                                           chapters
+   │    get_chapter_summary    pre-generated during ingestion   chapter_summaries
+   │    find_character_mentions  diacritics-insensitive ILIKE   chunks
+   │
+   │  agent emits {{cite:<chunk_id>}} markers inline
+   │  UI resolves full excerpt via GET /api/library/chunks/:id
+   │
+   └── Mastra Memory (PostgresStore) ────────────────────────▶ Postgres 18
+         mastra_threads / mastra_messages                       (own schema, same DB)
+         mastra_tool_calls / mastra_tool_outputs
+```
+
+Key invariants:
+
+- **Spoiler cap** — `semantic_search` filters at SQL level (`chapter_ordinal ≤ cap`);
+  system prompt reinforces the cap even if a chunk above it were to surface.
+- **Refusal contract** — zero-result retrieval produces a grounded refusal with ≥ 2
+  reformulation hints drawn from `list_chapters` output (ADR-003).
+- **Citation contract** — every non-trivial claim carries a `{{cite:<chunk_id>}}`
+  marker (ADR-007); Feature 004's streaming parser resolves them to badge UI.
+- **Bilingual** — agent responds in the language of the user's latest message; source
+  quotes retain their original language (ADR-002).
+
+### Smoke demo
+
+Five bash scripts under [`apps/mastra/src/scripts/curl/`](./apps/mastra/src/scripts/curl/README.md)
+drive the full path catalog → ingestion → retrieval → grounded answer:
+
+```sh
+cd apps/mastra/src/scripts/curl
+./01-add-books.sh       # add Moby Dick (EN) + Dom Casmurro (PT) + Crime and Punishment (EN)
+./02-create-thread.sh   # create a Mastra thread scoped to Moby Dick
+./03-ask-question.sh    # grounded question; assert ≥1 {{cite:<uuid>}} marker + chunk resolve
+./04-spoiler-cap.sh     # spoiler cap @ch10; refusal OR ordinal-bounded citations only
+./05-empty-retrieval.sh # off-topic question; refusal + ≥2 reformulation hints
+```
+
+Local deps: `bash`, `curl`, `jq` (`brew install jq` / `apt install jq`).
+
+### Validation results (task_12)
+
+12 questions across Moby Dick (EN), Dom Casmurro (PT), Crime and Punishment (EN):
+
+| Metric | Target | Measured | Status |
+|---|---|---|---|
+| Citation resolvability | ≥ 80 % | 100 % (10/10 cited turns) | PASS |
+| Post-cap citations | 0 | 0 (2 spoiler-cap scenarios) | PASS |
+| Unjustified refusals | ≤ 2 per 10 | 0 | PASS |
+| Language-match accuracy | 100 % | 100 % (12/12 turns) | PASS |
+
+Zero system-prompt iterations — the prompt shipped by task_06 passed all metrics on the
+first run. Full log: [`apps/mastra/src/scripts/curl/validation-log.md`](./apps/mastra/src/scripts/curl/validation-log.md).
+
 ## Next steps
 
 Foundation V1 is the baseline; product features begin with the book catalog. The next feature's PRD lives at [`.compozy/tasks/001-catalog/_prd.md`](./.compozy/tasks/001-catalog/_prd.md).

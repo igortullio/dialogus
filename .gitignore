@@ -20,3 +20,9 @@ Thumbs.db
 .playwright-mcp/
 playwright-report/
 test-results/
+
+# Compozy run artifacts (per-execution logs, prompts, results)
+.compozy/runs/
+
+# Worker runtime storage (downloaded books / cleaned text)
+apps/worker/storage/

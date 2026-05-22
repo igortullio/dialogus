@@ -3,11 +3,36 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
+import type { Book } from '@/lib/api/_schemas'
 import { type FetchLibraryResult, fetchLibrary } from '@/lib/api/library'
 import { LIBRARY_QUERY_KEY } from '@/lib/query-keys'
 import { isInProgress } from './StatusBadge'
 
 const POLL_INTERVAL_MS = 4000
+
+function seedSnapshot(books: readonly Book[], previous: Map<string, string>): void {
+  // First render: capture the current state without toasting, so we only
+  // notify on transitions that happen *after* the user opens the app.
+  for (const book of books) previous.set(book.id, book.ingestion_status)
+}
+
+function notifyTerminalTransition(book: Book, prev: string | undefined): void {
+  if (prev === undefined) return
+  const curr = book.ingestion_status
+  if (prev === curr) return
+  const wasActive = prev === 'discovered' || isInProgress(prev as never)
+  if (!wasActive) return
+  if (curr === 'ready') {
+    toast.success(`"${book.title}" está pronto para conversa.`)
+    return
+  }
+  if (curr === 'failed') {
+    toast.error(
+      `Falhou ao ingerir "${book.title}". ${book.ingestion_error ?? 'Veja a biblioteca.'}`,
+      { duration: 8000 },
+    )
+  }
+}
 
 /**
  * Background polling component mounted in the root layout. Watches the
@@ -39,29 +64,15 @@ export function IngestionMonitor() {
     const previous = previousByIdRef.current
 
     if (!initializedRef.current) {
-      // Seed the snapshot on first render so we don't toast for the
-      // pre-existing state of the library.
-      for (const book of books) previous.set(book.id, book.ingestion_status)
+      seedSnapshot(books, previous)
       initializedRef.current = true
       return
     }
 
     for (const book of books) {
       const prev = previous.get(book.id)
-      const curr = book.ingestion_status
-      previous.set(book.id, curr)
-      if (prev === undefined || prev === curr) continue
-      // Toast only on terminal transitions out of an active stage.
-      const wasActive = prev === 'discovered' || isInProgress(prev as never)
-      if (!wasActive) continue
-      if (curr === 'ready') {
-        toast.success(`"${book.title}" está pronto para conversa.`)
-      } else if (curr === 'failed') {
-        toast.error(
-          `Falhou ao ingerir "${book.title}". ${book.ingestion_error ?? 'Veja a biblioteca.'}`,
-          { duration: 8000 },
-        )
-      }
+      previous.set(book.id, book.ingestion_status)
+      notifyTerminalTransition(book, prev)
     }
   }, [query.data])
 

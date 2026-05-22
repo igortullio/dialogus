@@ -74,6 +74,54 @@ function buildMastraBody(body: Record<string, unknown>): Record<string, unknown>
   }
 }
 
+function parseSseLine(line: string): MastraEvent | null {
+  if (!line.startsWith('data: ')) return null
+  const data = line.slice(6).trim()
+  if (data === '[DONE]') return null
+  try {
+    return JSON.parse(data) as MastraEvent
+  } catch {
+    return null
+  }
+}
+
+function emitConverted(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+  event: MastraEvent,
+): void {
+  const chunk = convertEvent(event)
+  if (chunk === null) return
+  controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`))
+}
+
+function pipeMastraStream(source: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = source.getReader()
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+          for (const line of lines) {
+            const event = parseSseLine(line)
+            if (event !== null) emitConverted(controller, encoder, event)
+          }
+        }
+      } finally {
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      }
+    },
+  })
+}
+
 export async function POST(req: NextRequest): Promise<Response> {
   let body: Record<string, unknown>
   try {
@@ -101,42 +149,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     return new Response(null, { status: mastraRes.status })
   }
 
-  const encoder = new TextEncoder()
-  let buffer = ''
-
-  const convertedStream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      // Safe assertion: the outer handler returned early above when body is null.
-      const reader = (mastraRes.body as ReadableStream<Uint8Array>).getReader()
-      const decoder = new TextDecoder()
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() ?? ''
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue
-            const data = line.slice(6).trim()
-            if (data === '[DONE]') continue
-            try {
-              const event = JSON.parse(data) as MastraEvent
-              const chunk = convertEvent(event)
-              if (chunk !== null) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`))
-              }
-            } catch {
-              // ignore malformed lines
-            }
-          }
-        }
-      } finally {
-        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-        controller.close()
-      }
-    },
-  })
+  const convertedStream = pipeMastraStream(mastraRes.body as ReadableStream<Uint8Array>)
 
   return new Response(convertedStream, {
     headers: {

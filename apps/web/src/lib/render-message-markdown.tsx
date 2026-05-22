@@ -48,6 +48,17 @@ export interface RenderContext {
 
 const INLINE_PATTERN = `\\*\\*([^*\\n]+?)\\*\\*|\\*([^*\\n]+?)\\*|${CITE_OPEN}(\\d+)${CITE_CLOSE}`
 
+// Content-derived key. djb2 hash → base36 string. Used so React reconciliation
+// keys are stable across streaming re-renders (which extend the text, never
+// reorder it) without relying on array indexes.
+function contentKey(text: string): string {
+  let h = 5381
+  for (let i = 0; i < text.length; i += 1) {
+    h = ((h << 5) + h + text.charCodeAt(i)) | 0
+  }
+  return (h >>> 0).toString(36)
+}
+
 function renderInline(text: string, ctx: RenderContext): ReactNode[] {
   // Build a fresh regex per call: a global RegExp is stateful (`lastIndex`),
   // and recursive calls (bold/italic content rendered inline) would otherwise
@@ -135,11 +146,17 @@ function renderBlocks(source: string, ctx: Omit<RenderContext, 'keyPrefix'>): Re
     if (lines.every((l) => /^[-*]\s+/.test(l))) {
       out.push(
         <ul key={blockKey} className="my-2 list-disc space-y-1 pl-6 marker:text-muted-foreground">
-          {lines.map((l, j) => (
-            <li key={`${blockKey}-li-${j}`}>
-              {renderInline(l.replace(/^[-*]\s+/, ''), { ...ctx, keyPrefix: `${blockKey}-li${j}` })}
-            </li>
-          ))}
+          {lines.map((l) => {
+            const lineKey = contentKey(l)
+            return (
+              <li key={`${blockKey}-li-${lineKey}`}>
+                {renderInline(l.replace(/^[-*]\s+/, ''), {
+                  ...ctx,
+                  keyPrefix: `${blockKey}-li${lineKey}`,
+                })}
+              </li>
+            )
+          })}
         </ul>,
       )
       return
@@ -157,14 +174,15 @@ function renderBlocks(source: string, ctx: Omit<RenderContext, 'keyPrefix'>): Re
 function renderInlineMultiline(text: string, ctx: RenderContext): ReactNode[] {
   const lines = text.split('\n')
   const out: ReactNode[] = []
-  lines.forEach((line, i) => {
-    if (i > 0) out.push(<br key={`${ctx.keyPrefix}-br-${i}`} />)
+  for (const line of lines) {
+    const lineKey = contentKey(line)
+    if (out.length > 0) out.push(<br key={`${ctx.keyPrefix}-br-${lineKey}`} />)
     out.push(
-      <Fragment key={`${ctx.keyPrefix}-l-${i}`}>
-        {renderInline(line, { ...ctx, keyPrefix: `${ctx.keyPrefix}-l${i}` })}
+      <Fragment key={`${ctx.keyPrefix}-l-${lineKey}`}>
+        {renderInline(line, { ...ctx, keyPrefix: `${ctx.keyPrefix}-l${lineKey}` })}
       </Fragment>,
     )
-  })
+  }
   return out
 }
 

@@ -2,6 +2,7 @@
 
 import type { IngestionStatus, IngestionStatusDto } from '@dialogus/shared/schemas/ingestion'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -50,14 +51,18 @@ function Cover({ book }: CoverProps) {
   const [failed, setFailed] = useState(false)
   if (book.cover_url && !failed) {
     return (
-      <img
-        src={book.cover_url}
-        alt={`Capa de '${book.title}'`}
-        data-slot="book-card-cover"
-        loading="lazy"
-        onError={() => setFailed(true)}
-        className="aspect-[2/3] w-full rounded-md border bg-muted object-cover"
-      />
+      <div className="relative aspect-[2/3] w-full overflow-hidden rounded-md border bg-muted">
+        <Image
+          src={book.cover_url}
+          alt={`Capa de '${book.title}'`}
+          data-slot="book-card-cover"
+          fill
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px"
+          onError={() => setFailed(true)}
+          className="object-cover"
+          unoptimized
+        />
+      </div>
     )
   }
   return (

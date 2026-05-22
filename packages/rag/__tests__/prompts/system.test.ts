@@ -38,12 +38,17 @@ describe('@dialogus/rag system prompt asset', () => {
     expect(second).toBe(first)
   })
 
-  it('stays within the [500, 2000] token budget under cl100k_base', () => {
+  it('stays within the [500, 3000] token budget under cl100k_base', () => {
     const prompt = loadSystemPrompt()
     const encoder = getEncoding('cl100k_base')
     const tokens = encoder.encode(prompt).length
     expect(tokens).toBeGreaterThanOrEqual(500)
-    expect(tokens).toBeLessThanOrEqual(2000)
+    // Ceiling sits above the live size to leave room for safety rules
+    // (no-narration § 0, famous-work trap § 2, output format § 9).
+    // Anthropic prompt caching makes the marginal cost trivial after the
+    // first hit; OpenAI does automatic prefix caching for prompts > 1024
+    // tokens, so the headline cost is bounded either way.
+    expect(tokens).toBeLessThanOrEqual(3000)
   })
 
   it.each(REQUIRED_SECTION_PATTERNS)('contains the "$name" section', ({ pattern }) => {

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createAnthropic } from '@ai-sdk/anthropic'
+import { createOpenAI } from '@ai-sdk/openai'
 import Bottleneck from 'bottleneck'
 import { getEncoding, type Tiktoken } from 'js-tiktoken'
 import type {
@@ -11,29 +11,31 @@ import type {
 import { SummarizeError } from '../../domain/ingestion/IngestionError'
 import type { ParsedChapter, SupportedLanguage } from '../../domain/parser/ChapterParser.port'
 
-export const ANTHROPIC_SUMMARY_MODEL = 'claude-haiku-4-5'
+export const OPENAI_SUMMARY_MODEL = 'gpt-4o-mini'
 
 const TOKEN_ENCODING = 'cl100k_base' as const
 const DEFAULT_LIMITER_OPTIONS: ConstructorParameters<typeof Bottleneck>[0] = {
-  // 10 chapters/min × ~3-5k tokens each ≈ 30-50k input TPM, fitting under
-  // the Haiku 50k input-tokens-per-minute tier with a comfortable margin.
-  // Bump higher only when on a paid Anthropic tier with > 100k TPM.
+  // OpenAI tier 1 allows 500 RPM and 200k TPM on gpt-4o-mini. With long
+  // chapters (~5-8k tokens each), 40 RPM × 8k tokens = 320k TPM — over the
+  // ceiling. Pacing at 4s/call (15 RPM × 8k = 120k TPM) leaves ~40 % headroom
+  // and finishes a 100-chapter book in ~7 minutes.
   maxConcurrent: 1,
-  minTime: 6000,
+  minTime: 4000,
 }
-const DEFAULT_RATE_LIMIT_ATTEMPTS = 5
+const DEFAULT_RATE_LIMIT_ATTEMPTS = 8
 const DEFAULT_SERVER_ERROR_ATTEMPTS = 3
 const DEFAULT_RETRY_BASE_DELAY_MS = 500
-// Anthropic's 429 response carries a `retry-after` header in seconds (often
-// 30-90s when the input-token bucket is drained). The exponential backoff
-// floor sits well below that window, so when a 429 hits we honour the
-// server-provided wait before falling back to the exponential schedule.
+// OpenAI's 429 carries either `retry-after` (seconds) or `retry-after-ms`
+// (often very short, like 200ms for TPM bucket nudges). We honour the server
+// hint but floor it so we don't burn all attempts in a few hundred
+// milliseconds before the bucket actually refills.
 const DEFAULT_RETRY_MAX_DELAY_MS = 90_000
+const RATE_LIMIT_RETRY_FLOOR_MS = 8_000
 
 const here = dirname(fileURLToPath(import.meta.url))
 const DEFAULT_PROMPT_PATH = join(here, '..', 'prompts', 'summarize.md')
 
-export interface AnthropicChapterSummaryGeneratorOptions {
+export interface OpenAIChapterSummaryGeneratorOptions {
   readonly apiKey?: string
   readonly baseURL?: string
   readonly headers?: Record<string, string>
@@ -45,9 +47,10 @@ export interface AnthropicChapterSummaryGeneratorOptions {
   readonly maxRetryDelayMs?: number
   readonly sleep?: (ms: number) => Promise<void>
   readonly promptPath?: string
+  readonly model?: string
 }
 
-type AnthropicLanguageModel = ReturnType<ReturnType<typeof createAnthropic>>
+type OpenAILanguageModel = ReturnType<ReturnType<typeof createOpenAI>>
 
 interface TextContentPart {
   readonly type: 'text'
@@ -58,8 +61,9 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export class AnthropicChapterSummaryGenerator implements ChapterSummaryGenerator {
-  private readonly model: AnthropicLanguageModel
+export class OpenAIChapterSummaryGenerator implements ChapterSummaryGenerator {
+  private readonly model: OpenAILanguageModel
+  private readonly modelName: string
   private readonly limiter: Bottleneck
   private readonly rateLimitAttempts: number
   private readonly serverErrorAttempts: number
@@ -69,14 +73,15 @@ export class AnthropicChapterSummaryGenerator implements ChapterSummaryGenerator
   private readonly systemPrompt: string
   private readonly tokenizer: Tiktoken
 
-  constructor(options: AnthropicChapterSummaryGeneratorOptions = {}) {
-    const provider = createAnthropic({
-      apiKey: options.apiKey ?? process.env.ANTHROPIC_API_KEY ?? 'test',
+  constructor(options: OpenAIChapterSummaryGeneratorOptions = {}) {
+    const provider = createOpenAI({
+      apiKey: options.apiKey ?? process.env.OPENAI_API_KEY ?? 'test',
       baseURL: options.baseURL,
       headers: options.headers,
       fetch: options.fetchImpl,
     })
-    this.model = provider(ANTHROPIC_SUMMARY_MODEL)
+    this.modelName = options.model ?? OPENAI_SUMMARY_MODEL
+    this.model = provider(this.modelName)
     this.limiter = new Bottleneck(options.limiterOptions ?? DEFAULT_LIMITER_OPTIONS)
     this.rateLimitAttempts = options.rateLimitAttempts ?? DEFAULT_RATE_LIMIT_ATTEMPTS
     this.serverErrorAttempts = options.serverErrorAttempts ?? DEFAULT_SERVER_ERROR_ATTEMPTS
@@ -108,14 +113,14 @@ export class AnthropicChapterSummaryGenerator implements ChapterSummaryGenerator
         const status = extractStatusCode(error)
         const maxAttempts = this.maxAttemptsFor(status)
         if (maxAttempts === null) {
-          throw new SummarizeError(`Anthropic summary generation failed: ${describeError(error)}`, {
+          throw new SummarizeError(`OpenAI summary generation failed: ${describeError(error)}`, {
             cause: error,
             retryable: false,
           })
         }
         if (attempt >= maxAttempts) {
           throw new SummarizeError(
-            `Anthropic summary generation failed after ${attempt} attempt(s) with HTTP ${status ?? 'unknown'}`,
+            `OpenAI summary generation failed after ${attempt} attempt(s) with HTTP ${status ?? 'unknown'}`,
             { cause: lastError, retryable: true },
           )
         }
@@ -127,14 +132,16 @@ export class AnthropicChapterSummaryGenerator implements ChapterSummaryGenerator
   }
 
   private computeRetryDelay(error: unknown, status: number | undefined, attempt: number): number {
-    // Honour the server's `retry-after` on 429 — exponential backoff floored
-    // at ~8s is shorter than the typical 30-90s rate-limit window, so without
-    // this we'd burn all retry attempts inside the same throttled minute.
     if (status === 429) {
       const retryAfterMs = extractRetryAfterMs(error)
       if (retryAfterMs !== null) {
-        return Math.min(retryAfterMs, this.maxRetryDelayMs)
+        // Floor the server-suggested wait. OpenAI's TPM-bucket 429s often
+        // come with `retry-after-ms: 200`, but the bucket actually needs
+        // several seconds to refill enough for the next call. Sleeping the
+        // raw value burns all attempts in a flash.
+        return Math.min(Math.max(retryAfterMs, RATE_LIMIT_RETRY_FLOOR_MS), this.maxRetryDelayMs)
       }
+      return Math.min(RATE_LIMIT_RETRY_FLOOR_MS, this.maxRetryDelayMs)
     }
     return Math.min(this.retryBaseDelayMs * 2 ** (attempt - 1), this.maxRetryDelayMs)
   }
@@ -145,13 +152,7 @@ export class AnthropicChapterSummaryGenerator implements ChapterSummaryGenerator
   ): Promise<ChapterSummaryGeneration> {
     const result = await this.model.doGenerate({
       prompt: [
-        {
-          role: 'system',
-          content: this.systemPrompt,
-          providerOptions: {
-            anthropic: { cacheControl: { type: 'ephemeral' } },
-          },
-        },
+        { role: 'system', content: this.systemPrompt },
         {
           role: 'user',
           content: [{ type: 'text', text: buildUserPrompt(chapter, language) }],
@@ -160,10 +161,10 @@ export class AnthropicChapterSummaryGenerator implements ChapterSummaryGenerator
     })
     const summary = extractSummaryText(result.content).trim()
     if (summary.length === 0) {
-      throw new SummarizeError('Anthropic returned an empty summary', { retryable: false })
+      throw new SummarizeError('OpenAI returned an empty summary', { retryable: false })
     }
     const tokenCount = this.tokenizer.encode(summary).length
-    return { summary, tokenCount, model: ANTHROPIC_SUMMARY_MODEL }
+    return { summary, tokenCount, model: this.modelName }
   }
 
   private maxAttemptsFor(status: number | undefined): number | null {
@@ -218,14 +219,20 @@ function extractRetryAfterMs(error: unknown): number | null {
   if (typeof error !== 'object' || error === null) return null
   const headers = (error as { responseHeaders?: unknown }).responseHeaders
   if (typeof headers !== 'object' || headers === null) return null
-  const raw = (headers as Record<string, unknown>)['retry-after']
-  if (typeof raw !== 'string') return null
-  const seconds = Number.parseInt(raw, 10)
-  if (Number.isNaN(seconds) || seconds <= 0) return null
-  // Add a small jitter so retries from concurrent calls don't all land on
-  // the exact same wall-clock instant when the bucket refills.
-  const jitterMs = Math.floor(Math.random() * 1000)
-  return seconds * 1000 + jitterMs
+  const map = headers as Record<string, unknown>
+  const ms = map['retry-after-ms']
+  if (typeof ms === 'string') {
+    const parsed = Number.parseInt(ms, 10)
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed + Math.floor(Math.random() * 500)
+  }
+  const seconds = map['retry-after']
+  if (typeof seconds === 'string') {
+    const parsed = Number.parseInt(seconds, 10)
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      return parsed * 1000 + Math.floor(Math.random() * 1000)
+    }
+  }
+  return null
 }
 
 function describeError(error: unknown): string {

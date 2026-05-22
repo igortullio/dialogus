@@ -12,6 +12,10 @@ import { AnthropicChapterSummaryGenerator } from '@dialogus/ingestion/infrastruc
 import { GutendexDownloader } from '@dialogus/ingestion/infrastructure/external/GutendexDownloader'
 import { MockChapterSummaryGenerator } from '@dialogus/ingestion/infrastructure/external/MockChapterSummaryGenerator'
 import { MockEmbeddingProvider } from '@dialogus/ingestion/infrastructure/external/MockEmbeddingProvider'
+import {
+  OPENAI_SUMMARY_MODEL,
+  OpenAIChapterSummaryGenerator,
+} from '@dialogus/ingestion/infrastructure/external/OpenAIChapterSummaryGenerator'
 import { OpenAIEmbeddingProvider } from '@dialogus/ingestion/infrastructure/external/OpenAIEmbeddingProvider'
 import { EpubChapterParser } from '@dialogus/ingestion/infrastructure/parsing/EpubChapterParser'
 import { EpubChapterParserEpub2 } from '@dialogus/ingestion/infrastructure/parsing/EpubChapterParserEpub2'
@@ -77,7 +81,7 @@ function normalizeProviderEnv(value: string | undefined): EmbeddingProviderChoic
   )
 }
 
-export type SummaryGeneratorChoice = 'mock' | 'anthropic'
+export type SummaryGeneratorChoice = 'mock' | 'anthropic' | 'openai'
 export type SummaryGeneratorSource = 'env' | 'default'
 
 export interface SelectedSummaryGenerator {
@@ -90,6 +94,7 @@ export interface SelectedSummaryGenerator {
 export interface SelectSummaryGeneratorInput {
   readonly nodeEnv: DialogusEnv['NODE_ENV']
   readonly anthropicApiKey: string | undefined
+  readonly openaiApiKey: string | undefined
   readonly summaryGeneratorEnv: string | undefined
 }
 
@@ -116,6 +121,24 @@ export function selectSummaryGenerator(
     const generator = new AnthropicChapterSummaryGenerator({ apiKey: input.anthropicApiKey })
     return { generator, choice, source, modelName: 'claude-haiku-4-5' }
   }
+  if (choice === 'openai') {
+    if (!input.openaiApiKey || input.openaiApiKey.length === 0) {
+      throw new SummaryGeneratorConfigError(
+        'OPENAI_API_KEY is required when SUMMARY_GENERATOR=openai',
+      )
+    }
+    // OPENAI_SUMMARY_MIN_TIME_MS lets the operator slow the limiter to fit
+    // their account tier. Tier 0 (free) caps gpt-4o-mini at 3 RPM, so set
+    // 21000 there. Tier 1+ ($5 deposit) handles the 1500ms default.
+    const minTimeOverride = parsePositiveInt(process.env.OPENAI_SUMMARY_MIN_TIME_MS)
+    const generator = new OpenAIChapterSummaryGenerator({
+      apiKey: input.openaiApiKey,
+      ...(minTimeOverride !== null
+        ? { limiterOptions: { maxConcurrent: 1, minTime: minTimeOverride } }
+        : {}),
+    })
+    return { generator, choice, source, modelName: OPENAI_SUMMARY_MODEL }
+  }
   return {
     generator: new MockChapterSummaryGenerator(),
     choice,
@@ -128,10 +151,19 @@ function normalizeSummaryEnv(value: string | undefined): SummaryGeneratorChoice 
   if (value === undefined) return null
   const trimmed = value.trim().toLowerCase()
   if (trimmed === '') return null
-  if (trimmed === 'mock' || trimmed === 'anthropic') return trimmed
+  if (trimmed === 'mock' || trimmed === 'anthropic' || trimmed === 'openai') return trimmed
   throw new SummaryGeneratorConfigError(
-    `SUMMARY_GENERATOR must be "mock" or "anthropic" (got "${value}")`,
+    `SUMMARY_GENERATOR must be "mock", "anthropic", or "openai" (got "${value}")`,
   )
+}
+
+function parsePositiveInt(value: string | undefined): number | null {
+  if (value === undefined) return null
+  const trimmed = value.trim()
+  if (trimmed === '') return null
+  const parsed = Number.parseInt(trimmed, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return parsed
 }
 
 export interface ComposeStageDepsInput {
@@ -160,6 +192,7 @@ export function composeStageDeps(input: ComposeStageDepsInput): ComposedStageDep
   const summaryGenerator = selectSummaryGenerator({
     nodeEnv: input.config.NODE_ENV,
     anthropicApiKey: input.config.ANTHROPIC_API_KEY,
+    openaiApiKey: input.config.OPENAI_API_KEY,
     summaryGeneratorEnv: process.env.SUMMARY_GENERATOR,
   })
 

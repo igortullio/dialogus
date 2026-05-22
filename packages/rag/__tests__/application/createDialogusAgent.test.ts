@@ -62,13 +62,17 @@ function makeQueryEmbedder(): QueryEmbedder {
   }
 }
 
-function makeDeps(modelId: AgentDeps['modelId'] = 'claude-haiku-4-5'): AgentDeps {
+function makeDeps(
+  modelId: AgentDeps['modelId'] = 'claude-haiku-4-5',
+  modelProvider: AgentDeps['modelProvider'] = 'anthropic',
+): AgentDeps {
   return {
     chunkRepo: makeChunkRepo(),
     chapterRepo: makeChapterRepo(),
     chapterSummaryRepo: makeChapterSummaryRepo(),
     queryEmbedder: makeQueryEmbedder(),
     logger: makeLogger(),
+    modelProvider,
     modelId,
   }
 }
@@ -107,15 +111,23 @@ describe('createDialogusAgent — identity + tools', () => {
 
 describe('createDialogusAgent — model selection', () => {
   it("selects the Haiku model when modelId is 'claude-haiku-4-5'", async () => {
-    const agent = createDialogusAgent(makeDeps('claude-haiku-4-5'))
+    const agent = createDialogusAgent(makeDeps('claude-haiku-4-5', 'anthropic'))
     const model = await agent.getModel()
     expect(model.modelId).toBe('claude-haiku-4-5')
   })
 
   it("selects the Sonnet model when modelId is 'claude-sonnet-4-6'", async () => {
-    const agent = createDialogusAgent(makeDeps('claude-sonnet-4-6'))
+    const agent = createDialogusAgent(makeDeps('claude-sonnet-4-6', 'anthropic'))
     const model = await agent.getModel()
     expect(model.modelId).toBe('claude-sonnet-4-6')
+  })
+
+  it("selects an OpenAI model when modelProvider is 'openai'", async () => {
+    const agent = createDialogusAgent(makeDeps('gpt-4o-mini', 'openai'))
+    const model = await agent.getModel()
+    expect(model.modelId).toBe('gpt-4o-mini')
+    // AI SDK exposes provider as 'openai.responses' or 'openai.chat'
+    expect(model.provider.startsWith('openai')).toBe(true)
   })
 })
 

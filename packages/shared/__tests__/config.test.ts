@@ -42,18 +42,18 @@ describe('envSchema', () => {
     expect(parsed.LOG_LEVEL).toBe('info')
     expect(parsed.API_PORT).toBe(3001)
     expect(parsed.WEB_PORT).toBe(3000)
-    expect(parsed.MASTRA_PORT).toBe(3002)
+    expect(parsed.MASTRA_PORT).toBe(4111)
     expect(parsed.MASTRA_STUDIO_PORT).toBe(4111)
     expect(parsed.NEXT_PUBLIC_API_URL).toBe('http://localhost:3001')
-    expect(parsed.NEXT_PUBLIC_MASTRA_URL).toBe('http://localhost:3002')
+    expect(parsed.NEXT_PUBLIC_MASTRA_URL).toBe('http://localhost:4111')
   })
 
-  it('accepts MASTRA_PORT=3002 explicitly', () => {
+  it('accepts MASTRA_PORT=4111 explicitly', () => {
     const parsed = envSchema.parse({
       DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus',
-      MASTRA_PORT: '3002',
+      MASTRA_PORT: '4111',
     })
-    expect(parsed.MASTRA_PORT).toBe(3002)
+    expect(parsed.MASTRA_PORT).toBe(4111)
   })
 })
 
@@ -74,10 +74,10 @@ describe('loadConfig', () => {
     expect(cfg.LOG_LEVEL).toBe('info')
     expect(cfg.API_PORT).toBe(3001)
     expect(cfg.WEB_PORT).toBe(3000)
-    expect(cfg.MASTRA_PORT).toBe(3002)
+    expect(cfg.MASTRA_PORT).toBe(4111)
     expect(cfg.MASTRA_STUDIO_PORT).toBe(4111)
     expect(cfg.NEXT_PUBLIC_API_URL).toBe('http://localhost:3001')
-    expect(cfg.NEXT_PUBLIC_MASTRA_URL).toBe('http://localhost:3002')
+    expect(cfg.NEXT_PUBLIC_MASTRA_URL).toBe('http://localhost:4111')
   })
 
   it('coerces numeric port strings from process.env', () => {
@@ -101,10 +101,10 @@ describe('loadConfig', () => {
     expect(cfg.NEXT_PUBLIC_API_URL).toBe('http://localhost:3001')
   })
 
-  it('defaults NEXT_PUBLIC_MASTRA_URL to http://localhost:3002 when absent', () => {
+  it('defaults NEXT_PUBLIC_MASTRA_URL to http://localhost:4111 when absent', () => {
     withEnv({ DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus' })
     const cfg = loadConfig()
-    expect(cfg.NEXT_PUBLIC_MASTRA_URL).toBe('http://localhost:3002')
+    expect(cfg.NEXT_PUBLIC_MASTRA_URL).toBe('http://localhost:4111')
   })
 
   it('rejects malformed MASTRA_PORT values', () => {

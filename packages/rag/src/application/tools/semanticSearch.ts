@@ -7,7 +7,10 @@ import type { QueryEmbedder } from '../../domain/ports/QueryEmbedder.port'
 export const SEMANTIC_SEARCH_TOOL_ID = 'semantic_search'
 export const SEMANTIC_SEARCH_TOOL_DESCRIPTION =
   'Retrieve passages semantically similar to the query from selected books.'
-export const SEMANTIC_SEARCH_DEFAULT_K = 10
+// Default k=5 keeps the per-call payload modest (~1-2k tokens) so a turn with
+// two retrieval passes stays well below low-tier Anthropic rate limits.
+// The model can opt into a wider sweep up to MAX_K when really needed.
+export const SEMANTIC_SEARCH_DEFAULT_K = 5
 export const SEMANTIC_SEARCH_MAX_K = 30
 export const SEMANTIC_SEARCH_EXCERPT_PREVIEW_MAX_LENGTH = 200
 

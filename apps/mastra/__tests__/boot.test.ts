@@ -14,6 +14,10 @@ beforeAll(() => {
   process.env.LOG_LEVEL = 'error'
   process.env.MASTRA_PORT = process.env.MASTRA_PORT ?? '3002'
   process.env.MASTRA_STUDIO_PORT = process.env.MASTRA_STUDIO_PORT ?? '4111'
+  // Clear agent overrides so default-selection tests stay hermetic regardless
+  // of the developer's local .env (which may pin a specific model).
+  delete process.env.DIALOGUS_AGENT_MODEL
+  delete process.env.DIALOGUS_AGENT_PROVIDER
 })
 
 afterAll(() => {
@@ -29,27 +33,56 @@ describe.skipIf(!dockerAvailable)('apps/mastra mastra.config.ts', () => {
     expect(agents).toHaveProperty(DIALOGUS_AGENT_ID)
   })
 
-  it('selects claude-haiku-4-5 outside production', async () => {
+  it('defaults to openai/gpt-4o-mini outside production', async () => {
     const mod = await import('../mastra.config')
-    const id = mod.pickModelId({
+    // Clear inside the test too: importing mastra.config re-runs
+    // loadEnvFromRoot() at module load, repopulating env vars from .env.
+    delete process.env.DIALOGUS_AGENT_MODEL
+    delete process.env.DIALOGUS_AGENT_PROVIDER
+    const choice = mod.pickAgentModel({
       NODE_ENV: 'development',
-    } as Parameters<typeof mod.pickModelId>[0])
-    expect(id).toBe('claude-haiku-4-5')
+    } as Parameters<typeof mod.pickAgentModel>[0])
+    expect(choice.provider).toBe('openai')
+    expect(choice.modelId).toBe('gpt-4o-mini')
   })
 
-  it('selects claude-sonnet-4-6 in production', async () => {
+  it('defaults to anthropic/claude-sonnet-4-6 in production', async () => {
     const mod = await import('../mastra.config')
-    const id = mod.pickModelId({
+    delete process.env.DIALOGUS_AGENT_MODEL
+    delete process.env.DIALOGUS_AGENT_PROVIDER
+    const choice = mod.pickAgentModel({
       NODE_ENV: 'production',
-    } as Parameters<typeof mod.pickModelId>[0])
-    expect(id).toBe('claude-sonnet-4-6')
+    } as Parameters<typeof mod.pickAgentModel>[0])
+    expect(choice.provider).toBe('anthropic')
+    expect(choice.modelId).toBe('claude-sonnet-4-6')
   })
 
-  it('selects claude-haiku-4-5 in test', async () => {
+  it('defaults to openai/gpt-4o-mini in test', async () => {
     const mod = await import('../mastra.config')
-    const id = mod.pickModelId({
+    delete process.env.DIALOGUS_AGENT_MODEL
+    delete process.env.DIALOGUS_AGENT_PROVIDER
+    const choice = mod.pickAgentModel({
       NODE_ENV: 'test',
-    } as Parameters<typeof mod.pickModelId>[0])
-    expect(id).toBe('claude-haiku-4-5')
+    } as Parameters<typeof mod.pickAgentModel>[0])
+    expect(choice.provider).toBe('openai')
+    expect(choice.modelId).toBe('gpt-4o-mini')
+  })
+
+  it('honours DIALOGUS_AGENT_MODEL override (provider inferred from prefix)', async () => {
+    const mod = await import('../mastra.config')
+    process.env.DIALOGUS_AGENT_MODEL = 'gpt-4o'
+    delete process.env.DIALOGUS_AGENT_PROVIDER
+    const choice = mod.pickAgentModel({
+      NODE_ENV: 'development',
+    } as Parameters<typeof mod.pickAgentModel>[0])
+    expect(choice.provider).toBe('openai')
+    expect(choice.modelId).toBe('gpt-4o')
+
+    process.env.DIALOGUS_AGENT_MODEL = 'claude-sonnet-4-6'
+    const choice2 = mod.pickAgentModel({
+      NODE_ENV: 'development',
+    } as Parameters<typeof mod.pickAgentModel>[0])
+    expect(choice2.provider).toBe('anthropic')
+    expect(choice2.modelId).toBe('claude-sonnet-4-6')
   })
 })

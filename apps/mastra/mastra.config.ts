@@ -1,1 +1,1 @@
-export { buildMastra, createMastraLogger, mastra, pickModelId } from './src/index'
+export { buildMastra, createMastraLogger, mastra, pickAgentModel } from './src/index'

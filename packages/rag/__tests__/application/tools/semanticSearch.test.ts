@@ -221,7 +221,7 @@ describe('semanticSearchTool — input forwarding', () => {
     expect(params.spoilerCaps).toEqual(spoilerCaps)
   })
 
-  it('applies the default top-k of 10 when k is omitted', async () => {
+  it('applies the default top-k when k is omitted', async () => {
     const fixture = makeFixture({ chunks: [] })
 
     await fixture.tool.execute?.({ query: 'foo', book_ids: [BOOK_ID_A] }, {})

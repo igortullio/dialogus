@@ -3,7 +3,7 @@ import {
   createDialogusAgent,
   DIALOGUS_AGENT_ID,
   type DialogusAgentLogger,
-  type DialogusAgentModelId,
+  type DialogusAgentProvider,
   MockQueryEmbedder,
   OpenAIQueryEmbedder,
   type QueryEmbedder,
@@ -43,8 +43,42 @@ export function createMastraLogger(level: string): Logger {
   })
 }
 
-export function pickModelId(env: DialogusEnv): DialogusAgentModelId {
-  return env.NODE_ENV === 'production' ? 'claude-sonnet-4-6' : 'claude-haiku-4-5'
+export interface AgentModelChoice {
+  readonly provider: DialogusAgentProvider
+  readonly modelId: string
+}
+
+const ANTHROPIC_MODEL_PREFIXES = ['claude-']
+const OPENAI_MODEL_PREFIXES = ['gpt-', 'o1-', 'o3-', 'o4-']
+
+function inferProvider(modelId: string): DialogusAgentProvider | null {
+  if (ANTHROPIC_MODEL_PREFIXES.some((prefix) => modelId.startsWith(prefix))) return 'anthropic'
+  if (OPENAI_MODEL_PREFIXES.some((prefix) => modelId.startsWith(prefix))) return 'openai'
+  return null
+}
+
+export function pickAgentModel(env: DialogusEnv): AgentModelChoice {
+  // Two env vars control the agent model:
+  //   - DIALOGUS_AGENT_PROVIDER: 'anthropic' | 'openai'
+  //   - DIALOGUS_AGENT_MODEL: explicit model id (provider is inferred from
+  //     the prefix, e.g. 'gpt-' → openai, 'claude-' → anthropic)
+  // If both are set, DIALOGUS_AGENT_MODEL wins and the provider is derived.
+  // Defaults: dev → openai/gpt-4o-mini (cheap, generous tier 1 limits),
+  // prod → anthropic/claude-sonnet-4-6.
+  const explicitModel = process.env.DIALOGUS_AGENT_MODEL?.trim()
+  if (explicitModel && explicitModel.length > 0) {
+    const inferred = inferProvider(explicitModel)
+    if (inferred !== null) return { provider: inferred, modelId: explicitModel }
+  }
+  const explicitProvider = process.env.DIALOGUS_AGENT_PROVIDER?.trim().toLowerCase()
+  if (explicitProvider === 'openai') return { provider: 'openai', modelId: 'gpt-4o-mini' }
+  if (explicitProvider === 'anthropic') {
+    return { provider: 'anthropic', modelId: 'claude-haiku-4-5' }
+  }
+  if (env.NODE_ENV === 'production') {
+    return { provider: 'anthropic', modelId: 'claude-sonnet-4-6' }
+  }
+  return { provider: 'openai', modelId: 'gpt-4o-mini' }
 }
 
 function pickQueryEmbedder(env: DialogusEnv): QueryEmbedder {
@@ -63,19 +97,26 @@ export function buildMastra(options: BuildMastraOptions = {}): BuildMastraResult
   const chapterRepo = new DialogusChapterReadAdapter(db)
   const chapterSummaryRepo = new DialogusChapterSummaryReadAdapter(db)
 
+  const storage = new PostgresStore({
+    id: MASTRA_STORAGE_ID,
+    connectionString: env.DATABASE_URL,
+  })
+
+  const agentModel = pickAgentModel(env)
   const dialogusAgent = createDialogusAgent({
     chunkRepo,
     chapterRepo,
     chapterSummaryRepo,
     queryEmbedder,
     logger: logger as unknown as DialogusAgentLogger,
-    modelId: pickModelId(env),
+    modelProvider: agentModel.provider,
+    modelId: agentModel.modelId,
+    memoryStorage: storage,
   })
-
-  const storage = new PostgresStore({
-    id: MASTRA_STORAGE_ID,
-    connectionString: env.DATABASE_URL,
-  })
+  logger.info(
+    { provider: agentModel.provider, modelId: agentModel.modelId },
+    'agent model selected',
+  )
 
   const mastra = new Mastra({
     storage,

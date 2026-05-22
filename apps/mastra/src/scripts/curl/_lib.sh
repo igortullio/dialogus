@@ -9,7 +9,7 @@ TMP_DIR="${SCRIPT_DIR}/tmp"
 mkdir -p "${TMP_DIR}"
 
 API_BASE_URL="${API_BASE_URL:-http://localhost:3001}"
-MASTRA_BASE_URL="${MASTRA_BASE_URL:-http://localhost:3002}"
+MASTRA_BASE_URL="${MASTRA_BASE_URL:-http://localhost:4111}"
 RESOURCE_ID="${RESOURCE_ID:-dialogus-owner}"
 
 GUTENDEX_ID_MOBY_DICK="${GUTENDEX_ID_MOBY_DICK:-2701}"

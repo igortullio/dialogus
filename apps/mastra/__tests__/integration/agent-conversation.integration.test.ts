@@ -92,6 +92,7 @@ async function buildAgentRuntime(pg: PostgresContext): Promise<AgentRuntime> {
     chapterSummaryRepo: new DialogusChapterSummaryReadAdapter(pg.db),
     queryEmbedder: new MockQueryEmbedder(),
     logger: noopLogger,
+    modelProvider: 'anthropic',
     modelId: 'claude-haiku-4-5',
   })
   const storage = new PostgresStore({

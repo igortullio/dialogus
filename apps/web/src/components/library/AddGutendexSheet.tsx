@@ -390,11 +390,10 @@ export function AddGutendexSheet() {
             />
           </div>
 
-          <div
-            role="group"
+          <fieldset
             aria-label={FILTER_GROUP_LABEL}
             data-slot="add-gutendex-filter"
-            className="flex gap-2"
+            className="flex gap-2 border-0 p-0"
           >
             {FILTER_VALUES.map((value) => {
               const active = filter === value
@@ -419,7 +418,7 @@ export function AddGutendexSheet() {
                 </button>
               )
             })}
-          </div>
+          </fieldset>
 
           <div data-slot="add-gutendex-results-region" className="flex-1 overflow-y-auto">
             {showTypePrompt && (

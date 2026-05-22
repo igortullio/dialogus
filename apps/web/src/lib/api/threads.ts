@@ -109,25 +109,33 @@ function extractText(content: unknown): string {
   return out
 }
 
-function parseThreadMessages(raw: unknown): ThreadMessage[] {
-  const list =
+function extractMessagesArray(raw: unknown): unknown[] {
+  const candidate =
     raw && typeof raw === 'object' && raw !== null && 'messages' in raw
       ? (raw as { messages: unknown }).messages
       : raw
-  if (!Array.isArray(list)) return []
+  return Array.isArray(candidate) ? candidate : []
+}
+
+function toThreadMessage(item: RawMastraMessage): ThreadMessage | null {
+  const role = item.role
+  if (role !== 'user' && role !== 'assistant' && role !== 'system' && role !== 'tool') return null
+  if (item.type !== undefined && item.type !== 'text') return null
+  const text = extractText(item.content)
+  if (text.length === 0) return null
+  return {
+    id: typeof item.id === 'string' ? item.id : '',
+    role,
+    text,
+    createdAt: typeof item.createdAt === 'string' ? item.createdAt : null,
+  }
+}
+
+function parseThreadMessages(raw: unknown): ThreadMessage[] {
   const out: ThreadMessage[] = []
-  for (const item of list as RawMastraMessage[]) {
-    const role = item.role
-    if (role !== 'user' && role !== 'assistant' && role !== 'system' && role !== 'tool') continue
-    if (item.type !== undefined && item.type !== 'text') continue
-    const text = extractText(item.content)
-    if (text.length === 0) continue
-    out.push({
-      id: typeof item.id === 'string' ? item.id : '',
-      role,
-      text,
-      createdAt: typeof item.createdAt === 'string' ? item.createdAt : null,
-    })
+  for (const item of extractMessagesArray(raw) as RawMastraMessage[]) {
+    const msg = toThreadMessage(item)
+    if (msg !== null) out.push(msg)
   }
   return out
 }

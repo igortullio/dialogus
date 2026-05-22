@@ -118,12 +118,23 @@ function renderCancelButton(isRunning: boolean): ReactElement | null {
   )
 }
 
+type SubmitMode = 'enter' | 'ctrlEnter' | 'none'
+
+function shouldSubmitOnKey(e: KeyboardEvent<HTMLTextAreaElement>, mode: SubmitMode): boolean {
+  if (e.nativeEvent.isComposing) return false
+  if (e.key !== 'Enter') return false
+  if (e.shiftKey) return false
+  if (mode === 'enter') return true
+  if (mode === 'ctrlEnter') return e.ctrlKey || e.metaKey
+  return false
+}
+
 interface UncontrolledComposerInputProps {
   readonly className?: string
   readonly placeholder?: string
   readonly disabled?: boolean
   readonly canSubmit?: boolean
-  readonly submitMode?: 'enter' | 'ctrlEnter' | 'none'
+  readonly submitMode?: SubmitMode
   readonly 'aria-label'?: string
 }
 
@@ -159,20 +170,13 @@ function UncontrolledComposerInput({
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.nativeEvent.isComposing) return
-    if (e.key !== 'Enter') return
-    if (e.shiftKey) return
-    let shouldSubmit = false
-    if (submitMode === 'ctrlEnter') shouldSubmit = e.ctrlKey || e.metaKey
-    else if (submitMode === 'enter') shouldSubmit = true
-    if (shouldSubmit) {
-      e.preventDefault()
-      // Mirror the send button's disabled state. Without this, a keyboard
-      // shortcut bypasses the same guard the button enforces (e.g., empty
-      // book selection or in-flight stream).
-      if (!canSubmit) return
-      ref.current?.closest('form')?.requestSubmit()
-    }
+    if (!shouldSubmitOnKey(e, submitMode)) return
+    e.preventDefault()
+    // Mirror the send button's disabled state. Without this, a keyboard
+    // shortcut bypasses the same guard the button enforces (e.g., empty
+    // book selection or in-flight stream).
+    if (!canSubmit) return
+    ref.current?.closest('form')?.requestSubmit()
   }
 
   return (

@@ -1,9 +1,5 @@
-'use server'
-
 import type { NextRequest } from 'next/server'
-
-const MASTRA_BASE = process.env.NEXT_PUBLIC_MASTRA_URL ?? 'http://localhost:4111'
-const MASTRA_STREAM = `${MASTRA_BASE}/api/agents/dialogusAgent/stream`
+import { mastraBaseUrl } from '@/lib/api/_envelope'
 
 const PREFIX_RE = /^\[Available books:[^\]]*\]\n?/
 
@@ -57,7 +53,7 @@ function buildMastraBody(body: Record<string, unknown>): Record<string, unknown>
   const bookIds = (body.book_ids as string[] | undefined) ?? []
   const spoilerCaps = (body.spoiler_caps as Record<string, number> | undefined) ?? {}
   const capsStr =
-    Object.keys(spoilerCaps).length > 0 ? '; Spoiler caps: ' + JSON.stringify(spoilerCaps) : ''
+    Object.keys(spoilerCaps).length > 0 ? `; Spoiler caps: ${JSON.stringify(spoilerCaps)}` : ''
   const prefix = bookIds.length > 0 ? `[Available books: ${bookIds.join(', ')}${capsStr}]\n` : ''
 
   const rawMessage = typeof body.message === 'string' ? body.message : ''
@@ -88,9 +84,11 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const mastraBody = buildMastraBody(body)
 
+  const mastraStream = `${mastraBaseUrl()}/api/agents/dialogusAgent/stream`
+
   let mastraRes: Response
   try {
-    mastraRes = await fetch(MASTRA_STREAM, {
+    mastraRes = await fetch(mastraStream, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(mastraBody),
@@ -108,7 +106,8 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const convertedStream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const reader = mastraRes.body!.getReader()
+      // Safe assertion: the outer handler returned early above when body is null.
+      const reader = (mastraRes.body as ReadableStream<Uint8Array>).getReader()
       const decoder = new TextDecoder()
       try {
         while (true) {

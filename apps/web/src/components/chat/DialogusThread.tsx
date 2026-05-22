@@ -3,8 +3,11 @@
 import type { UIMessage } from '@ai-sdk/react'
 import { AssistantRuntimeProvider, ThreadPrimitive } from '@assistant-ui/react'
 import { AssistantChatTransport, useChatRuntime } from '@assistant-ui/react-ai-sdk'
+import { useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { mastraBaseUrl } from '@/lib/api/_envelope'
+import { THREADS_QUERY_KEY } from '@/lib/query-keys'
 import { readAllSpoilerCaps } from '@/lib/spoiler-cap'
 import { cn } from '@/lib/utils'
 import { openAddBookDrawer } from './add-book-drawer-store'
@@ -15,10 +18,46 @@ import {
 } from './DialogusContext'
 
 const STREAM_PATH = '/api/agents/dialogusAgent/stream'
+const RESOURCE_ID = 'owner'
+
+function newThreadId(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `thread-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+async function ensureMastraThread(threadId: string, bookIds: readonly string[]): Promise<void> {
+  // Idempotent create: Mastra returns 200 on duplicate id. The placeholder
+  // title is replaced asynchronously by the agent's own `generateTitle: true`
+  // memory option after the first turn, so we don't bother deriving one here.
+  const url = `${mastraBaseUrl().replace(/\/+$/, '')}/api/memory/threads?agentId=dialogusAgent`
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: threadId,
+        resourceId: RESOURCE_ID,
+        title: 'Nova conversa',
+        metadata: { book_ids: bookIds, pinned: false, custom_title: null },
+      }),
+    })
+  } catch {
+    // Best-effort: if Mastra is down we still let the stream proceed; the
+    // user-facing error from the stream itself is enough.
+  }
+}
+
+export interface InitialMessage {
+  readonly id: string
+  readonly role: 'user' | 'assistant' | 'system'
+  readonly text: string
+}
 
 export interface DialogusThreadProps {
   readonly threadId?: string | null
   readonly initialBookIds?: readonly string[]
+  readonly initialMessages?: readonly InitialMessage[]
   readonly className?: string
   readonly children: ReactNode
 }
@@ -26,6 +65,11 @@ export interface DialogusThreadProps {
 interface SendStateRef {
   threadId: string | null
   bookIds: string[]
+}
+
+interface PersistenceRef {
+  effectiveThreadId: string | null
+  threadCreated: boolean
 }
 
 function extractMessageText(message: UIMessage): string {
@@ -46,9 +90,18 @@ function extractMessageText(message: UIMessage): string {
   return out
 }
 
+function toUIMessage(msg: InitialMessage): UIMessage {
+  return {
+    id: msg.id,
+    role: msg.role,
+    parts: [{ type: 'text', text: msg.text }],
+  } as UIMessage
+}
+
 export function DialogusThread({
   threadId = null,
   initialBookIds = [],
+  initialMessages,
   className,
   children,
 }: DialogusThreadProps) {
@@ -59,6 +112,16 @@ export function DialogusThread({
   const sendStateRef = useRef<SendStateRef>({ threadId, bookIds })
   sendStateRef.current = { threadId, bookIds }
 
+  // Persistence ref: effectiveThreadId is the id we actually send to Mastra.
+  // For an existing thread it equals the prop; for a new conversation we
+  // generate one lazily on first send so the thread record can be persisted.
+  const persistenceRef = useRef<PersistenceRef>({
+    effectiveThreadId: threadId,
+    threadCreated: threadId !== null,
+  })
+
+  const queryClient = useQueryClient()
+
   const setBookIds = useCallback((ids: string[]) => {
     setBookIdsState(ids.slice(0, MAX_BOOKS_PER_THREAD))
   }, [])
@@ -68,28 +131,65 @@ export function DialogusThread({
       new AssistantChatTransport<UIMessage>({
         api: STREAM_PATH,
         prepareSendMessagesRequest: ({ messages, body }) => {
-          const { threadId: currentThreadId, bookIds: currentBookIds } = sendStateRef.current
+          const { bookIds: currentBookIds } = sendStateRef.current
           const lastMessage = messages[messages.length - 1]
           const messageText = lastMessage ? extractMessageText(lastMessage) : ''
-          const spoiler_caps = currentThreadId !== null ? readAllSpoilerCaps(currentThreadId) : {}
+
+          let { effectiveThreadId } = persistenceRef.current
+          if (effectiveThreadId === null) {
+            effectiveThreadId = newThreadId()
+            persistenceRef.current.effectiveThreadId = effectiveThreadId
+          }
+
+          const spoiler_caps = readAllSpoilerCaps(effectiveThreadId)
+
+          if (!persistenceRef.current.threadCreated) {
+            persistenceRef.current.threadCreated = true
+            // Fire-and-forget: ensures the thread row exists before/while
+            // Mastra Memory writes messages and runs its own async title
+            // generation (Memory `generateTitle: true`).
+            void ensureMastraThread(effectiveThreadId, currentBookIds).then(() => {
+              queryClient.invalidateQueries({ queryKey: THREADS_QUERY_KEY })
+            })
+          }
+
           const requestBody: Record<string, unknown> = {
             ...(body ?? {}),
             messages: messages.map((m) => ({ role: m.role, content: extractMessageText(m) })),
             message: messageText,
+            threadId: effectiveThreadId,
+            resourceId: RESOURCE_ID,
+            requestContext: { book_ids: currentBookIds, spoiler_caps },
+            // Legacy snake_case mirrors kept for the route's prefix builder.
             book_ids: currentBookIds,
             spoiler_caps,
           }
-          if (currentThreadId !== null) requestBody.thread_id = currentThreadId
           return { body: requestBody }
         },
       }),
-    [],
+    [queryClient],
   )
+
+  // Hydrate the runtime with prior turns from Mastra Memory. Computed once
+  // per mount via useMemo (the runtime ignores subsequent identity changes
+  // anyway). New conversations pass undefined and start empty.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: snapshot per mount
+  const seedMessages = useMemo<UIMessage[] | undefined>(() => {
+    if (!initialMessages || initialMessages.length === 0) return undefined
+    return initialMessages.map(toUIMessage)
+  }, [])
 
   const runtime = useChatRuntime({
     transport,
+    messages: seedMessages,
     onError: (error: Error) => {
       toast.error(error.message || 'Erro durante a conversa')
+    },
+    onFinish: () => {
+      // Mastra Memory's `generateTitle: true` runs async after the stream
+      // completes. Invalidate so the sidebar replaces the "Nova conversa"
+      // placeholder with the agent-derived title once it's persisted.
+      queryClient.invalidateQueries({ queryKey: THREADS_QUERY_KEY })
     },
   })
 

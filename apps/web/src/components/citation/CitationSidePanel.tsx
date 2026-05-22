@@ -144,6 +144,10 @@ function ChunkPanelBody({ chunkId }: ChunkPanelBodyProps) {
   if (chunk.isPending || !chunk.data) {
     return (
       <div data-slot="citation-side-panel-loading" className="flex flex-col gap-3 p-6">
+        <SheetHeader className="sr-only">
+          <SheetTitle>Carregando citação</SheetTitle>
+          <SheetDescription>Buscando o trecho original do livro.</SheetDescription>
+        </SheetHeader>
         <Skeleton className="h-5 w-2/3" />
         <Skeleton className="h-4 w-1/2" />
         <Skeleton className="h-32 w-full" />
@@ -160,6 +164,9 @@ function ChunkPanelBody({ chunkId }: ChunkPanelBodyProps) {
           <span className="font-serif text-sm italic text-muted-foreground">{bookTitle}</span>
         ) : null}
         <SheetTitle>{`Cap. ${chunk.data.chapter_ordinal} — ${chunk.data.chapter_title}`}</SheetTitle>
+        <SheetDescription className="sr-only">
+          Trecho original do livro citado pelo agente.
+        </SheetDescription>
       </SheetHeader>
       <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
         {chunk.data.text}

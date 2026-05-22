@@ -10,6 +10,10 @@ vi.mock('../../../src/lib/api/threads', () => ({
   deleteThread: vi.fn(),
 }))
 
+vi.mock('../../../src/lib/api/library', () => ({
+  fetchLibrary: vi.fn().mockResolvedValue({ books: [], nextCursor: null }),
+}))
+
 vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }))
@@ -72,9 +76,11 @@ describe('ThreadSidebar', () => {
       </Wrap>,
     )
     await waitFor(() => {
-      expect(screen.getByText('Primeiros passos')).toBeDefined()
+      expect(screen.getByText('Acervo vazio')).toBeDefined()
     })
     expect(document.querySelector('[data-slot="empty-state-card"]')).not.toBeNull()
+    const link = document.querySelector('[data-slot="empty-state-library-link"]')
+    expect(link?.getAttribute('href')).toBe('/library')
     expect(document.querySelector('[data-slot="thread-sidebar-pinned"]')).toBeNull()
     expect(document.querySelector('[data-slot="thread-sidebar-recent"]')).toBeNull()
   })

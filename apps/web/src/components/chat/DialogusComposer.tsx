@@ -53,6 +53,7 @@ export function DialogusComposer({
           aria-label="Mensagem"
           placeholder={placeholder}
           disabled={composerDisabled}
+          canSubmit={!sendDisabled}
           submitMode="ctrlEnter"
           className={cn(
             'min-h-[60px] w-full resize-none rounded-md border bg-background px-3 py-2 text-sm',
@@ -121,6 +122,7 @@ interface UncontrolledComposerInputProps {
   readonly className?: string
   readonly placeholder?: string
   readonly disabled?: boolean
+  readonly canSubmit?: boolean
   readonly submitMode?: 'enter' | 'ctrlEnter' | 'none'
   readonly 'aria-label'?: string
 }
@@ -136,6 +138,7 @@ function UncontrolledComposerInput({
   className,
   placeholder,
   disabled,
+  canSubmit = true,
   submitMode = 'enter',
   'aria-label': ariaLabel,
 }: UncontrolledComposerInputProps) {
@@ -164,6 +167,10 @@ function UncontrolledComposerInput({
     else if (submitMode === 'enter') shouldSubmit = true
     if (shouldSubmit) {
       e.preventDefault()
+      // Mirror the send button's disabled state. Without this, a keyboard
+      // shortcut bypasses the same guard the button enforces (e.g., empty
+      // book selection or in-flight stream).
+      if (!canSubmit) return
       ref.current?.closest('form')?.requestSubmit()
     }
   }

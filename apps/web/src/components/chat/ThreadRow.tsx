@@ -23,6 +23,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { useThreadCleanup } from '@/hooks/useThreadCleanup'
 import type { Thread } from '@/lib/api/_schemas'
+import { listThreads } from '@/lib/api/threads'
 import { THREADS_QUERY_KEY } from '@/lib/query-keys'
 import { useThreadMetadata } from '@/lib/thread-metadata'
 import { cn } from '@/lib/utils'
@@ -58,8 +59,13 @@ function defaultTitleFromThread(thread: Thread | undefined): string {
 }
 
 function useThreadFromList(threadId: string): Thread | undefined {
+  // Subscribes to the shared THREADS_QUERY_KEY cache populated by
+  // ThreadSidebar. Disabled here so this row never refetches on its own — but
+  // TanStack Query 5 still requires a queryFn for type narrowing and to silence
+  // the dev-time "no queryFn" warning, so we hand it the canonical loader.
   const query = useQuery<Thread[]>({
     queryKey: THREADS_QUERY_KEY,
+    queryFn: listThreads,
     enabled: false,
   })
   return query.data?.find((thread) => thread.id === threadId)

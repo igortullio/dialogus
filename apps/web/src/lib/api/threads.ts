@@ -81,6 +81,66 @@ function metadataFromThread(thread: Thread): ThreadMetadata {
   }
 }
 
+export interface ThreadMessage {
+  readonly id: string
+  readonly role: 'user' | 'assistant' | 'system' | 'tool'
+  readonly text: string
+  readonly createdAt: string | null
+}
+
+interface RawMastraMessage {
+  id?: unknown
+  role?: unknown
+  content?: unknown
+  createdAt?: unknown
+  type?: unknown
+}
+
+function extractText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  let out = ''
+  for (const part of content) {
+    if (part && typeof part === 'object') {
+      const p = part as { type?: unknown; text?: unknown }
+      if (p.type === 'text' && typeof p.text === 'string') out += p.text
+    }
+  }
+  return out
+}
+
+function parseThreadMessages(raw: unknown): ThreadMessage[] {
+  const list =
+    raw && typeof raw === 'object' && raw !== null && 'messages' in raw
+      ? (raw as { messages: unknown }).messages
+      : raw
+  if (!Array.isArray(list)) return []
+  const out: ThreadMessage[] = []
+  for (const item of list as RawMastraMessage[]) {
+    const role = item.role
+    if (role !== 'user' && role !== 'assistant' && role !== 'system' && role !== 'tool') continue
+    if (item.type !== undefined && item.type !== 'text') continue
+    const text = extractText(item.content)
+    if (text.length === 0) continue
+    out.push({
+      id: typeof item.id === 'string' ? item.id : '',
+      role,
+      text,
+      createdAt: typeof item.createdAt === 'string' ? item.createdAt : null,
+    })
+  }
+  return out
+}
+
+export async function fetchThreadMessages(threadId: string): Promise<ThreadMessage[]> {
+  return mastraFetch(
+    `${MASTRA_BASE}/${threadId}/messages?agentId=${MASTRA_AGENT_ID}`,
+    { method: 'GET' },
+    parseThreadMessages,
+    'fetchThreadMessages',
+  )
+}
+
 export async function listThreads(): Promise<Thread[]> {
   if (useMastra) {
     return mastraFetch(`${MASTRA_BASE}`, { method: 'GET' }, parseThreadList, 'listThreads')

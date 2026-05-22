@@ -102,4 +102,55 @@ describe('DialogusMessage', () => {
     expect(root?.getAttribute('data-message-status')).toBe('streaming')
     expect(root?.getAttribute('data-message-id')).toBe('m-8')
   })
+
+  it('shows "Pensando…" when assistant is streaming with no text yet', () => {
+    renderMessage({
+      messageId: 'm-9',
+      text: '',
+      role: 'assistant',
+      status: 'streaming',
+      activity: [],
+    })
+    const activity = document.querySelector('[data-slot="dialogus-message-activity"]')
+    expect(activity?.textContent).toContain('Pensando')
+    // No caret while there is no body to anchor it to.
+    expect(document.querySelector('[data-slot="dialogus-message-caret"]')).toBeNull()
+  })
+
+  it('humanises a running tool name into the activity label', () => {
+    renderMessage({
+      messageId: 'm-10',
+      text: '',
+      role: 'assistant',
+      status: 'streaming',
+      activity: [{ id: 't1', toolName: 'semantic_search', running: true }],
+    })
+    const activity = document.querySelector('[data-slot="dialogus-message-activity"]')
+    expect(activity?.textContent).toContain('Buscando passagens')
+  })
+
+  it('shows a streaming caret once text starts arriving', () => {
+    renderMessage({
+      messageId: 'm-11',
+      text: 'Pierre é o filho ilegítimo',
+      role: 'assistant',
+      status: 'streaming',
+      activity: [{ id: 't1', toolName: 'semantic_search', running: false }],
+    })
+    expect(document.querySelector('[data-slot="dialogus-message-caret"]')).not.toBeNull()
+    // Activity hides once body is present and no tool is still running.
+    expect(document.querySelector('[data-slot="dialogus-message-activity"]')).toBeNull()
+  })
+
+  it('hides activity and caret once message is complete', () => {
+    renderMessage({
+      messageId: 'm-12',
+      text: 'Resposta final.',
+      role: 'assistant',
+      status: 'complete',
+      activity: [{ id: 't1', toolName: 'semantic_search', running: false }],
+    })
+    expect(document.querySelector('[data-slot="dialogus-message-activity"]')).toBeNull()
+    expect(document.querySelector('[data-slot="dialogus-message-caret"]')).toBeNull()
+  })
 })

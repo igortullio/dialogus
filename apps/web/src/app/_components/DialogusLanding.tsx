@@ -1,21 +1,34 @@
 'use client'
 
 import { ThreadPrimitive, useMessage } from '@assistant-ui/react'
+import { useQuery } from '@tanstack/react-query'
 import { Menu } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { DialogusComposer } from '@/components/chat/DialogusComposer'
 import { useDialogusThreadContext } from '@/components/chat/DialogusContext'
 import { DialogusMessage, type DialogusMessageStatus } from '@/components/chat/DialogusMessage'
-import { DialogusThread } from '@/components/chat/DialogusThread'
+import {
+  DialogusThread,
+  type InitialMessage as ThreadInitialMessage,
+} from '@/components/chat/DialogusThread'
 import { ThreadHeader } from '@/components/chat/ThreadHeader'
 import { ThreadSidebar } from '@/components/chat/ThreadSidebar'
 import { CitationSidePanel } from '@/components/citation/CitationSidePanel'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import { fetchThreadMessages, type ThreadMessage } from '@/lib/api/threads'
 
 const EMPTY_MAIN_TITLE = 'Selecione uma conversa ou comece uma nova'
 const EMPTY_MAIN_HINT = 'Escolha 1 a 3 livros e envie sua primeira pergunta.'
 const SIDEBAR_DRAWER_LABEL = 'Conversas'
+const SIDEBAR_DRAWER_DESCRIPTION =
+  'Lista de conversas anteriores. Selecione uma para retomar ou crie uma nova.'
 const HAMBURGER_LABEL = 'Abrir conversas'
 
 function deriveMessageStatus(
@@ -27,6 +40,38 @@ function deriveMessageStatus(
   if (status.type === 'running') return 'streaming'
   if (status.type === 'incomplete') return 'incomplete'
   return 'complete'
+}
+
+interface ToolActivity {
+  readonly id: string
+  readonly toolName: string
+  readonly running: boolean
+}
+
+function extractActivity(content: ReadonlyArray<unknown>): readonly ToolActivity[] {
+  const out: ToolActivity[] = []
+  for (const part of content) {
+    if (
+      part &&
+      typeof part === 'object' &&
+      'type' in part &&
+      (part as { type: unknown }).type === 'tool-call'
+    ) {
+      const toolPart = part as {
+        toolCallId?: string
+        toolName?: string
+        result?: unknown
+      }
+      if (typeof toolPart.toolCallId === 'string' && typeof toolPart.toolName === 'string') {
+        out.push({
+          id: toolPart.toolCallId,
+          toolName: toolPart.toolName,
+          running: toolPart.result === undefined,
+        })
+      }
+    }
+  }
+  return out
 }
 
 function DialogusMessageAdapter() {
@@ -44,18 +89,78 @@ function DialogusMessageAdapter() {
     return out
   }, [content])
 
+  const activity = useMemo(() => extractActivity(content), [content])
+
   const messageStatus = deriveMessageStatus(role, status)
 
   return (
-    <div data-slot="dialogus-message-row" data-role={role} className="py-3">
+    <div data-slot="dialogus-message-row" data-role={role} className="py-5 first:pt-8">
       <DialogusMessage
         messageId={messageId}
         text={text}
         role={role}
         status={messageStatus}
         threadId={threadId ?? ''}
+        activity={activity}
       />
     </div>
+  )
+}
+
+function toInitialMessage(msg: ThreadMessage): ThreadInitialMessage | null {
+  if (msg.role !== 'user' && msg.role !== 'assistant' && msg.role !== 'system') return null
+  return { id: msg.id, role: msg.role, text: msg.text }
+}
+
+interface ThreadShellProps {
+  readonly threadId: string | null
+}
+
+function ThreadShell({ threadId }: ThreadShellProps) {
+  const messagesQuery = useQuery<ThreadMessage[]>({
+    queryKey: ['thread-messages', threadId ?? ''],
+    queryFn: () => (threadId !== null ? fetchThreadMessages(threadId) : Promise.resolve([])),
+    enabled: threadId !== null,
+    staleTime: Number.POSITIVE_INFINITY,
+  })
+
+  // For an existing thread, wait for the message fetch before mounting the
+  // runtime — the runtime initialises with `messages` only once on mount, so
+  // mounting before fetch resolves leaves the conversation visually empty
+  // until the user reloads.
+  const ready = threadId === null || messagesQuery.isSuccess || messagesQuery.isError
+
+  if (!ready) {
+    return (
+      <div
+        data-slot="thread-loading"
+        className="flex h-full items-center justify-center text-muted-foreground text-sm"
+      >
+        Carregando conversa…
+      </div>
+    )
+  }
+
+  const initialMessages =
+    threadId !== null && messagesQuery.data
+      ? messagesQuery.data
+          .map(toInitialMessage)
+          .filter((m): m is ThreadInitialMessage => m !== null)
+      : undefined
+
+  return (
+    <DialogusThread key={threadId ?? 'new'} threadId={threadId} initialMessages={initialMessages}>
+      <ThreadHeader />
+      <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-4">
+        <ThreadPrimitive.If empty>
+          <EmptyChatMain />
+        </ThreadPrimitive.If>
+        <ThreadPrimitive.If empty={false}>
+          <ThreadPrimitive.Messages components={{ Message: DialogusMessageAdapter }} />
+        </ThreadPrimitive.If>
+      </ThreadPrimitive.Viewport>
+      <DialogusComposer />
+    </DialogusThread>
   )
 }
 
@@ -104,6 +209,7 @@ export function DialogusLanding() {
         >
           <SheetHeader className="sr-only">
             <SheetTitle>{SIDEBAR_DRAWER_LABEL}</SheetTitle>
+            <SheetDescription>{SIDEBAR_DRAWER_DESCRIPTION}</SheetDescription>
           </SheetHeader>
           <ThreadSidebar
             selectedThreadId={activeThreadId}
@@ -132,18 +238,7 @@ export function DialogusLanding() {
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          <DialogusThread key={activeThreadId ?? 'new'} threadId={activeThreadId}>
-            <ThreadHeader />
-            <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-4">
-              <ThreadPrimitive.If empty>
-                <EmptyChatMain />
-              </ThreadPrimitive.If>
-              <ThreadPrimitive.If empty={false}>
-                <ThreadPrimitive.Messages components={{ Message: DialogusMessageAdapter }} />
-              </ThreadPrimitive.If>
-            </ThreadPrimitive.Viewport>
-            <DialogusComposer />
-          </DialogusThread>
+          <ThreadShell threadId={activeThreadId} />
         </div>
       </main>
 

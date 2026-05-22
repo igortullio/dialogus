@@ -1,12 +1,17 @@
 'use client'
 
-import { Fragment, useMemo } from 'react'
-import { CitationBadge } from '@/components/citation/CitationBadge'
-import { initialParserState, parseStream, type Token } from '@/lib/citation-parser'
+import { useMemo } from 'react'
+import { renderMessageBody } from '@/lib/render-message-markdown'
 import { cn } from '@/lib/utils'
 import { usePrefetchCitations } from './usePrefetchCitations'
 
 export type DialogusMessageStatus = 'streaming' | 'complete' | 'incomplete'
+
+export interface ToolActivity {
+  readonly id: string
+  readonly toolName: string
+  readonly running: boolean
+}
 
 export interface DialogusMessageProps {
   readonly messageId: string
@@ -15,24 +20,32 @@ export interface DialogusMessageProps {
   readonly status?: DialogusMessageStatus
   readonly className?: string
   readonly role?: 'user' | 'assistant' | 'system'
+  readonly activity?: readonly ToolActivity[]
 }
 
-interface ParsedMessage {
-  readonly tokens: readonly Token[]
-  readonly chunkIds: readonly string[]
+const TOOL_LABELS: Record<string, string> = {
+  semantic_search: 'Buscando passagens',
+  list_chapters: 'Consultando o índice',
+  get_chapter_summary: 'Lendo resumo do capítulo',
+  find_character_mentions: 'Localizando menções',
 }
 
-function parseFullMessage(text: string): ParsedMessage {
-  const { tokens, nextState } = parseStream(text, initialParserState())
-  const finalTokens = [...tokens]
-  if (nextState.kind === 'marker_pending') {
-    finalTokens.push({ kind: 'unresolved', rawText: `{{${nextState.buffer}` })
+function describeActivity(
+  activity: readonly ToolActivity[] | undefined,
+  hasText: boolean,
+): string | null {
+  if (activity === undefined || activity.length === 0) {
+    return hasText ? null : 'Pensando…'
   }
-  const chunkIds: string[] = []
-  for (const token of finalTokens) {
-    if (token.kind === 'citation') chunkIds.push(token.chunkId)
+  // Prefer the most recent running tool; if none running, the agent is composing.
+  for (let i = activity.length - 1; i >= 0; i--) {
+    const tool = activity[i]
+    if (tool?.running) {
+      const label = TOOL_LABELS[tool.toolName] ?? 'Consultando'
+      return `${label}…`
+    }
   }
-  return { tokens: finalTokens, chunkIds }
+  return hasText ? null : 'Compondo resposta…'
 }
 
 export function DialogusMessage({
@@ -42,57 +55,77 @@ export function DialogusMessage({
   status = 'complete',
   className,
   role = 'assistant',
+  activity,
 }: DialogusMessageProps) {
-  // Re-parse from the full message text on every render. The parser is pure and
-  // deterministic, so re-parsing produces stable token indexes; restarting from
-  // initialParserState() per render is what guarantees the parser state resets
-  // on a new messageId without explicit per-id state tracking.
-  const parsed = useMemo(() => parseFullMessage(text), [text])
+  // Re-render from the full message text on every render. The renderer is pure
+  // and deterministic, so re-running it produces stable indexes; restarting per
+  // messageId via React's reconciler is what guarantees parser state resets on
+  // a new message without explicit per-id state tracking.
+  const rendered = useMemo(
+    () =>
+      renderMessageBody(text, {
+        messageId,
+        threadId,
+        // Markdown only applies to assistant turns. User input is rendered as
+        // plain text so a typed "**asterisks**" stays literal in the question.
+        markdown: role === 'assistant',
+      }),
+    [text, messageId, threadId, role],
+  )
 
   usePrefetchCitations({
-    chunkIds: parsed.chunkIds,
-    enabled: status === 'complete' && parsed.chunkIds.length > 0,
+    chunkIds: rendered.chunkIds,
+    enabled: status === 'complete' && rendered.chunkIds.length > 0,
   })
 
-  let citationIndex = 0
-  const nodes = parsed.tokens.map((token, idx) => {
-    if (token.kind === 'text') {
-      return <Fragment key={`t-${idx}`}>{token.text}</Fragment>
-    }
-    if (token.kind === 'citation') {
-      citationIndex += 1
-      return (
-        <CitationBadge
-          key={`c-${idx}`}
-          chunkId={token.chunkId}
-          index={citationIndex}
-          threadId={threadId}
-          messageId={messageId}
-        />
-      )
-    }
-    // Parser-level "unresolved" tokens are malformed citation markers (e.g.,
-    // a non-UUID body or a 60-char buffer bailout). They render as the raw
-    // source text so the user can see the unparsed marker. This is distinct
-    // from <UnresolvedCitationBadge>, which task_11 will mount when a valid
-    // UUID marker is not in the message's tool_outputs.
-    return <Fragment key={`u-${idx}`}>{token.rawText}</Fragment>
-  })
+  const isStreaming = status === 'streaming' && role === 'assistant'
+  const activityLabel = isStreaming ? describeActivity(activity, text.length > 0) : null
+  const hasNoBody = role === 'assistant' && text.length === 0
 
   return (
-    <div
+    <article
       data-slot="dialogus-message"
       data-message-id={messageId}
       data-message-status={status}
       data-role={role}
-      className={cn(
-        'whitespace-pre-wrap break-words text-sm leading-relaxed',
-        role === 'user' && 'text-foreground',
-        role === 'assistant' && 'text-foreground',
-        className,
-      )}
+      className={cn('mx-auto w-full max-w-[68ch] space-y-1.5', className)}
     >
-      {nodes}
-    </div>
+      <div className="font-sans text-[10.5px] font-medium uppercase tracking-[0.18em] text-muted-foreground/80">
+        {role === 'user' ? 'Pergunta' : 'Resposta'}
+      </div>
+      {activityLabel !== null && (
+        <div
+          data-slot="dialogus-message-activity"
+          aria-live="polite"
+          className="flex items-center gap-2 font-sans text-[12px] text-muted-foreground"
+        >
+          <span
+            aria-hidden
+            className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground/70"
+          />
+          <span className="italic">{activityLabel}</span>
+        </div>
+      )}
+      {!hasNoBody && (
+        <div
+          data-slot="dialogus-message-content"
+          className={cn(
+            'break-words font-serif text-[15px] leading-[1.7] text-foreground',
+            role === 'user'
+              ? 'whitespace-pre-wrap border-l-2 border-border pl-3 italic text-muted-foreground'
+              : '[&_p]:break-words',
+          )}
+        >
+          {rendered.nodes}
+          {isStreaming && text.length > 0 && (
+            <span
+              aria-hidden
+              data-slot="dialogus-message-caret"
+              className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse bg-foreground/70 align-baseline"
+            />
+          )}
+        </div>
+      )}
+    </article>
   )
 }

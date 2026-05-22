@@ -83,7 +83,7 @@ async function readSpoilerCapKeysForThread(page: Page, threadId: string): Promis
     const keys: string[] = []
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const key = window.localStorage.key(i)
-      if (key && key.startsWith(prefix)) keys.push(key)
+      if (key?.startsWith(prefix)) keys.push(key)
     }
     return keys
   }, threadId)

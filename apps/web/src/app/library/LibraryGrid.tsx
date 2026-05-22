@@ -1,7 +1,8 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { Plus, Search } from 'lucide-react'
+import { ArrowLeft, Plus, Search } from 'lucide-react'
+import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { openAddBookDrawer } from '@/components/chat/add-book-drawer-store'
 import { BookCard } from '@/components/library/BookCard'
@@ -17,6 +18,7 @@ export { LIBRARY_QUERY_KEY }
 
 const PAGE_HEADING = 'Gerenciar acervo'
 const PAGE_SUBHEADING = 'Seus livros prontos para conversa.'
+const BACK_TO_CHAT_LABEL = 'Voltar para a conversa'
 const SEARCH_PLACEHOLDER = 'Buscar por título ou autor…'
 const SEARCH_LABEL = 'Buscar no acervo'
 const ADD_BUTTON_LABEL = 'Adicionar do Gutendex'
@@ -66,6 +68,14 @@ export function LibraryGrid({ initialData, className }: LibraryGridProps) {
       className={cn('flex h-full flex-col gap-6 px-6 py-8 lg:px-10', className)}
     >
       <header data-slot="library-header" className="flex flex-col gap-4">
+        <Link
+          href="/"
+          data-slot="library-back-link"
+          className="inline-flex w-fit items-center gap-1.5 text-muted-foreground text-sm transition-colors hover:text-foreground"
+        >
+          <ArrowLeft aria-hidden className="h-4 w-4" />
+          {BACK_TO_CHAT_LABEL}
+        </Link>
         <div className="flex flex-col gap-1">
           <h1 className="font-serif text-2xl">{PAGE_HEADING}</h1>
           <p className="text-muted-foreground text-sm">{PAGE_SUBHEADING}</p>

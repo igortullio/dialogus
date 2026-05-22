@@ -1,6 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import {
@@ -23,8 +24,19 @@ const DESCRIPTION_PREFIX =
   'Repetir a ingestão pode levar alguns minutos e consumir recursos do Gutendex.'
 const NO_ERROR_FALLBACK = 'Nenhuma mensagem de erro disponível.'
 const CONFIRM_LABEL = 'Tentar novamente'
+const CONFIRM_PENDING_LABEL = 'Reiniciando…'
 const CANCEL_LABEL = 'Cancelar'
 const ERROR_TOAST = 'Não foi possível reiniciar a ingestão.'
+const SUCCESS_TOAST_PREFIX = 'Reingestão iniciada'
+const STAGE_LABEL: Record<string, string> = {
+  download: 'baixar',
+  clean: 'limpar',
+  parse: 'parsear',
+  chunk: 'chunking',
+  summarize: 'sumarizar',
+  embed: 'embeddings',
+  index: 'indexar',
+}
 const LIBRARY_QUERY_KEY = ['library'] as const
 const INGESTION_QUERY_KEY = (id: string) => ['ingestion', id] as const
 
@@ -53,10 +65,12 @@ export function RetryButton({
 
   const mutation = useMutation({
     mutationFn: () => retryIngestion(bookId, makeIdempotencyKey(bookId)),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY })
       queryClient.invalidateQueries({ queryKey: INGESTION_QUERY_KEY(bookId) })
       setOpen(false)
+      const stage = STAGE_LABEL[result.resumingStage] ?? result.resumingStage
+      toast.success(`${SUCCESS_TOAST_PREFIX} — retomando do estágio "${stage}".`)
     },
     onError: () => {
       toast.error(ERROR_TOAST)
@@ -92,7 +106,7 @@ export function RetryButton({
             {errorText}
           </p>
           <AlertDialogFooter>
-            <AlertDialogCancel data-slot="retry-button-dialog-cancel">
+            <AlertDialogCancel data-slot="retry-button-dialog-cancel" disabled={mutation.isPending}>
               {CANCEL_LABEL}
             </AlertDialogCancel>
             <AlertDialogAction
@@ -103,7 +117,14 @@ export function RetryButton({
                 mutation.mutate()
               }}
             >
-              {CONFIRM_LABEL}
+              {mutation.isPending ? (
+                <>
+                  <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />
+                  {CONFIRM_PENDING_LABEL}
+                </>
+              ) : (
+                CONFIRM_LABEL
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -118,7 +139,10 @@ export const _internals = {
   DESCRIPTION_PREFIX,
   NO_ERROR_FALLBACK,
   CONFIRM_LABEL,
+  CONFIRM_PENDING_LABEL,
   CANCEL_LABEL,
   ERROR_TOAST,
+  SUCCESS_TOAST_PREFIX,
+  STAGE_LABEL,
   makeIdempotencyKey,
 }

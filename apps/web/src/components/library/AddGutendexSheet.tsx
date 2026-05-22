@@ -18,6 +18,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { ApiError } from '@/lib/api/_error'
 import type { Book, GutendexBook } from '@/lib/api/_schemas'
 import {
   type GutendexLanguage,
@@ -25,7 +26,7 @@ import {
   type SearchGutendexResult,
   searchGutendex,
 } from '@/lib/api/catalog'
-import { addBook } from '@/lib/api/library'
+import { addBook, restoreBook } from '@/lib/api/library'
 import { cn } from '@/lib/utils'
 import { CoverFallback } from './CoverFallback'
 
@@ -281,27 +282,51 @@ export function AddGutendexSheet() {
     })
   }
 
+  function syncLibraryCacheWith(book: Book): void {
+    const existing = queryClient.getQueryData<{ books: Book[]; nextCursor: string | null }>(
+      LIBRARY_QUERY_KEY,
+    )
+    if (existing) {
+      const alreadyPresent = existing.books.some((entry) => entry.id === book.id)
+      if (!alreadyPresent) {
+        queryClient.setQueryData(LIBRARY_QUERY_KEY, {
+          books: [book, ...existing.books],
+          nextCursor: existing.nextCursor,
+        })
+      }
+    } else {
+      queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY })
+    }
+  }
+
+  function existingIdFromDuplicate(error: unknown): string | null {
+    if (!(error instanceof ApiError)) return null
+    if (error.slug !== 'duplicate-gutendex-id') return null
+    const candidate = (error.problem as { existing_book_id?: unknown } | null)?.existing_book_id
+    return typeof candidate === 'string' && candidate.length > 0 ? candidate : null
+  }
+
   const addMutation = useMutation({
-    mutationFn: (gutendexId: number) => addBook(gutendexId, makeIdempotencyKey(gutendexId)),
+    mutationFn: async (gutendexId: number): Promise<Book> => {
+      try {
+        return await addBook(gutendexId, makeIdempotencyKey(gutendexId))
+      } catch (error) {
+        // The catalog soft-deletes books, so re-adding a Gutendex id that
+        // exists (active or trashed) returns 409 duplicate-gutendex-id with
+        // the existing UUID. Restore is the user's intent here.
+        const existingId = existingIdFromDuplicate(error)
+        if (existingId !== null) {
+          return await restoreBook(existingId)
+        }
+        throw error
+      }
+    },
     onMutate: (gutendexId) => {
       setRowState(gutendexId, 'pending')
     },
     onSuccess: (book: Book, gutendexId) => {
       setRowState(gutendexId, 'added')
-      const existing = queryClient.getQueryData<{ books: Book[]; nextCursor: string | null }>(
-        LIBRARY_QUERY_KEY,
-      )
-      if (existing) {
-        const alreadyPresent = existing.books.some((entry) => entry.id === book.id)
-        if (!alreadyPresent) {
-          queryClient.setQueryData(LIBRARY_QUERY_KEY, {
-            books: [book, ...existing.books],
-            nextCursor: existing.nextCursor,
-          })
-        }
-      } else {
-        queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY })
-      }
+      syncLibraryCacheWith(book)
     },
     onError: (_error, gutendexId) => {
       setRowState(gutendexId, 'error')

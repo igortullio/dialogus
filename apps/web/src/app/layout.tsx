@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { AddGutendexSheet } from '@/components/library/AddGutendexSheet'
+import { IngestionMonitor } from '@/components/library/IngestionMonitor'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import { QueryClientProvider } from '@/lib/query-client'
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <QueryClientProvider>
             {children}
             <AddGutendexSheet />
+            <IngestionMonitor />
           </QueryClientProvider>
           <Toaster />
         </ThemeProvider>

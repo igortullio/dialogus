@@ -2,7 +2,8 @@
 
 import type { IngestionStatus, IngestionStatusDto } from '@dialogus/shared/schemas/ingestion'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { Book } from '@/lib/api/_schemas'
@@ -116,6 +117,24 @@ export function BookCard({ book, className }: BookCardProps) {
   const liveProgress = liveStatusQuery.data?.progress ?? 0
   const inProgress = isInProgress(liveStatus)
   const lastError = liveStatusQuery.data?.error?.message ?? book.ingestion_error ?? null
+
+  // Surface terminal transitions (in-progress → ready/failed) as toasts so
+  // the user notices even when not staring at this card.
+  const previousStatusRef = useRef<IngestionStatus>(book.ingestion_status)
+  useEffect(() => {
+    const previous = previousStatusRef.current
+    previousStatusRef.current = liveStatus
+    if (previous === liveStatus) return
+    if (!isInProgress(previous) && previous !== 'discovered') return
+    if (liveStatus === 'ready') {
+      toast.success(`"${book.title}" está pronto para conversa.`)
+    } else if (liveStatus === 'failed') {
+      toast.error(
+        `Falhou ao ingerir "${book.title}". ${lastError ?? 'Veja a biblioteca para tentar novamente.'}`,
+        { duration: 8000 },
+      )
+    }
+  }, [liveStatus, book.title, lastError])
 
   const invalidateLibrary = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY })

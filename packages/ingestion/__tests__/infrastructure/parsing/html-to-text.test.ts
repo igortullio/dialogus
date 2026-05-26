@@ -39,4 +39,23 @@ describe('htmlToPlainText', () => {
   it('keeps unknown named entities verbatim', () => {
     expect(htmlToPlainText('<p>&unknownentity;</p>')).toBe('&unknownentity;')
   })
+
+  it('collapses soft-wrap newlines inside a paragraph but preserves <br>', () => {
+    const input =
+      '<p>The night-light\ncontinued to burn on the chimney-piece, exhausting the last drops\nof oil which floated</p>' +
+      '<p>Line one<br/>Line two</p>'
+    expect(htmlToPlainText(input)).toBe(
+      'The night-light continued to burn on the chimney-piece, exhausting the last drops of oil which floated\n\nLine one\nLine two',
+    )
+  })
+
+  it('strips XML prolog, DOCTYPE, and comments from XHTML EPUB chapters', () => {
+    const input = [
+      "<?xml version='1.0' encoding='utf-8'?>",
+      "<!DOCTYPE html PUBLIC '-//W3C//DTD XHTML 1.1//EN' 'http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd'>",
+      '<!-- a comment -->',
+      '<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Chapter body.</p></body></html>',
+    ].join('\n')
+    expect(htmlToPlainText(input)).toBe('Chapter body.')
+  })
 })

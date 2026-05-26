@@ -6,7 +6,7 @@ import { type FormEvent, type KeyboardEvent, type ReactElement, useEffect, useRe
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { BookPicker } from './BookPicker'
+import { BookPicker, SelectedBooksInline } from './BookPicker'
 import { useDialogusThreadContext } from './DialogusContext'
 
 const NO_BOOKS_HINT = 'Selecione ao menos um livro para enviar'
@@ -39,14 +39,15 @@ export function DialogusComposer({
         )}
       >
         <div className="flex items-center gap-2">
-          <BookPicker
-            value={bookIds}
-            onChange={setBookIds}
-            disabled={pickerDisabled}
-            onOpenAddDrawer={openAddBookDrawer}
-          />
-          {isExistingThread && (
-            <span className="text-muted-foreground text-xs">Trocar livros = nova conversa</span>
+          {isExistingThread ? (
+            <SelectedBooksInline bookIds={bookIds} />
+          ) : (
+            <BookPicker
+              value={bookIds}
+              onChange={setBookIds}
+              disabled={pickerDisabled}
+              onOpenAddDrawer={openAddBookDrawer}
+            />
           )}
         </div>
         <UncontrolledComposerInput

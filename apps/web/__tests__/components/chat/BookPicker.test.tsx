@@ -143,26 +143,36 @@ describe('BookPicker', () => {
   it('opens the popover and lists ready books from the library API', async () => {
     renderPicker()
     clickTrigger()
+    // Scope by data-book-id to avoid colliding with title text repeated inside
+    // the SVG CoverFallback for books without a real cover URL.
     await waitFor(() => {
-      expect(screen.getByText('Memórias Póstumas de Brás Cubas')).toBeDefined()
+      expect(document.querySelector(`[data-book-id="${BOOK_A_ID}"]`)).not.toBeNull()
     })
-    expect(screen.getByText('Crime e Castigo')).toBeDefined()
-    expect(screen.getByText('O Conde de Monte Cristo')).toBeDefined()
+    expect(document.querySelector(`[data-book-id="${BOOK_B_ID}"]`)).not.toBeNull()
+    expect(document.querySelector(`[data-book-id="${BOOK_C_ID}"]`)).not.toBeNull()
   })
 
   it('selecting a book reports the new value via onChange', async () => {
     const { onChange } = renderPicker({ value: [] })
     clickTrigger()
-    await waitFor(() => screen.getByText('Memórias Póstumas de Brás Cubas'))
-    fireEvent.click(screen.getByText('Memórias Póstumas de Brás Cubas'))
+    const row = await waitFor(() => {
+      const el = document.querySelector<HTMLButtonElement>(`[data-book-id="${BOOK_A_ID}"]`)
+      if (!el) throw new Error('row not yet rendered')
+      return el
+    })
+    fireEvent.click(row)
     expect(onChange).toHaveBeenCalledWith([BOOK_A_ID])
   })
 
   it('clicking an already-selected book deselects it', async () => {
     const { onChange } = renderPicker({ value: [BOOK_A_ID] })
     clickTrigger()
-    await waitFor(() => screen.getByText('Memórias Póstumas de Brás Cubas'))
-    fireEvent.click(screen.getByText('Memórias Póstumas de Brás Cubas'))
+    const row = await waitFor(() => {
+      const el = document.querySelector<HTMLButtonElement>(`[data-book-id="${BOOK_A_ID}"]`)
+      if (!el) throw new Error('row not yet rendered')
+      return el
+    })
+    fireEvent.click(row)
     expect(onChange).toHaveBeenCalledWith([])
   })
 
@@ -170,12 +180,14 @@ describe('BookPicker', () => {
     const onChange = vi.fn()
     renderPicker({ value: [BOOK_A_ID, BOOK_B_ID, BOOK_C_ID], onChange })
     clickTrigger()
-    await waitFor(() => screen.getByText('Dom Casmurro'))
-    const dom = screen.getByText('Dom Casmurro').closest('button')
-    expect(dom).not.toBeNull()
-    expect(dom?.getAttribute('aria-disabled')).toBe('true')
+    const dom = await waitFor(() => {
+      const el = document.querySelector<HTMLButtonElement>(`[data-book-id="${BOOK_D_ID}"]`)
+      if (!el) throw new Error('row not yet rendered')
+      return el
+    })
+    expect(dom.getAttribute('aria-disabled')).toBe('true')
     await act(async () => {
-      dom?.click()
+      dom.click()
     })
     expect(onChange).not.toHaveBeenCalled()
   })

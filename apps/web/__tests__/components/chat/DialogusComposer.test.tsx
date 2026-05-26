@@ -127,10 +127,13 @@ describe('DialogusComposer', () => {
     expect(document.querySelector('[data-slot="dialogus-composer-cancel"]')).toBeNull()
   })
 
-  it('disables the picker when isExistingThread is true', () => {
+  it('replaces the picker with a read-only book strip on existing threads', () => {
     renderComposer({ threadId: 'thread-1', initialBookIds: [BOOK_A_ID, BOOK_B_ID] })
-    const trigger = screen.getByRole('button', { name: 'Selecionar livros para a conversa' })
-    expect(trigger.hasAttribute('disabled')).toBe(true)
-    expect(screen.getByText('Trocar livros = nova conversa')).toBeDefined()
+    // Picker is intentionally absent — switching books requires a new thread.
+    expect(screen.queryByRole('button', { name: 'Selecionar livros para a conversa' })).toBeNull()
+    expect(screen.queryByText('Trocar livros = nova conversa')).toBeNull()
+    // The inline strip renders even if the library cache hasn't resolved yet
+    // (each missing entry shows a placeholder).
+    expect(document.querySelector('[data-slot="selected-books-inline"]')).not.toBeNull()
   })
 })

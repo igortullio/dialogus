@@ -1,7 +1,7 @@
 'use client'
 
 import { ThreadPrimitive, useMessage } from '@assistant-ui/react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Menu } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { DialogusComposer } from '@/components/chat/DialogusComposer'
@@ -22,7 +22,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import type { Thread } from '@/lib/api/_schemas'
 import { fetchThreadMessages, type ThreadMessage } from '@/lib/api/threads'
+import { THREADS_QUERY_KEY } from '@/lib/query-keys'
 
 const EMPTY_MAIN_TITLE = 'Selecione uma conversa ou comece uma nova'
 const EMPTY_MAIN_HINT = 'Escolha 1 a 3 livros e envie sua primeira pergunta.'
@@ -117,12 +119,22 @@ interface ThreadShellProps {
 }
 
 function ThreadShell({ threadId }: ThreadShellProps) {
+  const queryClient = useQueryClient()
   const messagesQuery = useQuery<ThreadMessage[]>({
     queryKey: ['thread-messages', threadId ?? ''],
     queryFn: () => (threadId !== null ? fetchThreadMessages(threadId) : Promise.resolve([])),
     enabled: threadId !== null,
     staleTime: Number.POSITIVE_INFINITY,
   })
+
+  // Read book_ids for this thread from the shared THREADS_QUERY_KEY cache
+  // populated by ThreadSidebar. New conversations have no thread row yet.
+  const initialBookIds = (() => {
+    if (threadId === null) return undefined
+    const threads = queryClient.getQueryData<Thread[]>(THREADS_QUERY_KEY)
+    const found = threads?.find((t) => t.id === threadId)
+    return found?.metadata?.book_ids
+  })()
 
   // For an existing thread, wait for the message fetch before mounting the
   // runtime — the runtime initialises with `messages` only once on mount, so
@@ -149,7 +161,12 @@ function ThreadShell({ threadId }: ThreadShellProps) {
       : undefined
 
   return (
-    <DialogusThread key={threadId ?? 'new'} threadId={threadId} initialMessages={initialMessages}>
+    <DialogusThread
+      key={threadId ?? 'new'}
+      threadId={threadId}
+      initialBookIds={initialBookIds}
+      initialMessages={initialMessages}
+    >
       <ThreadHeader />
       <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto px-4">
         <ThreadPrimitive.If empty>

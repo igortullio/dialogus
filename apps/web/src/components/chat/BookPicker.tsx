@@ -2,7 +2,9 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
+import Image from 'next/image'
 import { useState } from 'react'
+import { CoverFallback } from '@/components/library/CoverFallback'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -36,6 +38,43 @@ function formatTriggerLabel(selectedCount: number): string {
 
 function bookRowKey(book: Book): string {
   return `book-row-${book.id}`
+}
+
+interface BookThumbProps {
+  readonly book: Book
+  readonly sizeClass?: string
+}
+
+/**
+ * Compact cover thumbnail used in the book picker rows and in the inline
+ * selected-books strip. Falls back to the SVG `CoverFallback` if the network
+ * cover URL is missing or fails to load.
+ */
+export function BookThumb({ book, sizeClass = 'h-10 w-7' }: BookThumbProps) {
+  const [failed, setFailed] = useState(false)
+  if (book.cover_url && !failed) {
+    return (
+      <div
+        data-slot="book-thumb"
+        className={cn('relative shrink-0 overflow-hidden rounded-sm border bg-muted', sizeClass)}
+      >
+        <Image
+          src={book.cover_url}
+          alt={`Capa de '${book.title}'`}
+          fill
+          sizes="40px"
+          unoptimized
+          onError={() => setFailed(true)}
+          className="object-cover"
+        />
+      </div>
+    )
+  }
+  return (
+    <div data-slot="book-thumb-fallback" className={cn('shrink-0', sizeClass)}>
+      <CoverFallback title={book.title} author={book.authors[0]?.name} className="h-full w-full" />
+    </div>
+  )
 }
 
 interface BookRowProps {
@@ -74,9 +113,10 @@ function BookRow({ book, selected, atLimit, onToggle }: BookRowProps) {
       >
         {selected ? '✓' : ''}
       </span>
-      <span className="flex flex-col">
-        <span className="font-medium leading-tight">{book.title}</span>
-        <span className="text-muted-foreground text-xs leading-tight">{author}</span>
+      <BookThumb book={book} />
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate font-medium leading-tight">{book.title}</span>
+        <span className="truncate text-muted-foreground text-xs leading-tight">{author}</span>
       </span>
     </button>
   )
@@ -179,6 +219,68 @@ export function BookPicker({
         </PopoverContent>
       </Popover>
     </TooltipProvider>
+  )
+}
+
+export interface SelectedBooksInlineProps {
+  readonly bookIds: readonly string[]
+}
+
+/**
+ * Read-only strip showing the books bound to an existing thread. Used in the
+ * composer once a conversation has started — the picker is intentionally
+ * absent because changing books on an existing thread is not supported (the
+ * user must open a new conversation to switch books).
+ */
+export function SelectedBooksInline({ bookIds }: SelectedBooksInlineProps) {
+  // Reuse the picker's library cache so we don't pay a second round-trip just
+  // to render the same titles the user already saw when picking.
+  const query = useQuery({
+    queryKey: ['library', 'ready'] as const,
+    queryFn: queryReadyBooks,
+  })
+
+  if (bookIds.length === 0) return null
+
+  const byId = new Map(query.data?.books.map((b) => [b.id, b]) ?? [])
+  return (
+    <div
+      data-slot="selected-books-inline"
+      role="group"
+      aria-label="Livros desta conversa"
+      className="flex flex-wrap items-center gap-2 text-sm"
+    >
+      {bookIds.map((id) => {
+        const book = byId.get(id)
+        if (!book) {
+          return (
+            <span
+              key={`selected-book-missing-${id}`}
+              data-slot="selected-book-missing"
+              className="text-muted-foreground text-xs"
+            >
+              Livro indisponível
+            </span>
+          )
+        }
+        return (
+          <div
+            key={`selected-book-${book.id}`}
+            data-slot="selected-book"
+            data-book-id={book.id}
+            className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1"
+          >
+            <BookThumb book={book} sizeClass="h-9 w-6" />
+            <span className="flex min-w-0 flex-col leading-tight">
+              <span className="max-w-[180px] truncate font-medium">{book.title}</span>
+              <span className="max-w-[180px] truncate text-muted-foreground text-xs">
+                {book.authors[0]?.name ?? 'Desconhecido'}
+              </span>
+            </span>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

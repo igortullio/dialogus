@@ -29,7 +29,7 @@ import { useThreadMetadata } from '@/lib/thread-metadata'
 import { cn } from '@/lib/utils'
 
 const TITLE_MAX_LEN = 40
-const FALLBACK_TITLE = 'Conversa sem título'
+const FALLBACK_TITLE = 'Nova conversa'
 const RENAME_LABEL = 'Renomear'
 const PIN_LABEL = 'Fixar'
 const UNPIN_LABEL = 'Desafixar'
@@ -179,7 +179,7 @@ export function ThreadRow({ threadId, isActive, onSelect }: ThreadRowProps) {
           aria-current={isActive ? 'page' : undefined}
           aria-label={`Abrir conversa: ${displayTitle}`}
           className={cn(
-            'flex flex-1 items-center truncate text-left text-sm',
+            'flex h-full flex-1 items-center truncate text-left text-sm',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           )}
         >

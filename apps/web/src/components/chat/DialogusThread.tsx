@@ -26,19 +26,18 @@ function newThreadId(): string {
     : `thread-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-async function ensureMastraThread(threadId: string, bookIds: readonly string[]): Promise<void> {
-  // Idempotent create: Mastra returns 200 on duplicate id. The placeholder
-  // title is replaced asynchronously by the agent's own `generateTitle: true`
-  // memory option after the first turn, so we don't bother deriving one here.
-  const url = `${mastraBaseUrl().replace(/\/+$/, '')}/api/memory/threads?agentId=dialogusAgent`
+async function writeThreadMetadata(threadId: string, bookIds: readonly string[]): Promise<void> {
+  // Mastra's POST /threads ignores client-provided ids and always generates a
+  // fresh uuid, so pre-creating the thread is impossible. Instead the stream
+  // call creates the thread implicitly (via `memory.thread = effectiveThreadId`)
+  // and we PATCH metadata afterwards. PATCH is safe because by the time
+  // onFinish fires the implicit create has committed.
+  const url = `${mastraBaseUrl().replace(/\/+$/, '')}/api/memory/threads/${threadId}?agentId=dialogusAgent`
   try {
     await fetch(url, {
-      method: 'POST',
+      method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        id: threadId,
-        resourceId: RESOURCE_ID,
-        title: 'Nova conversa',
         metadata: { book_ids: bookIds, pinned: false, custom_title: null },
       }),
     })
@@ -69,7 +68,7 @@ interface SendStateRef {
 
 interface PersistenceRef {
   effectiveThreadId: string | null
-  threadCreated: boolean
+  metadataWritten: boolean
 }
 
 function extractMessageText(message: UIMessage): string {
@@ -117,7 +116,9 @@ export function DialogusThread({
   // generate one lazily on first send so the thread record can be persisted.
   const persistenceRef = useRef<PersistenceRef>({
     effectiveThreadId: threadId,
-    threadCreated: threadId !== null,
+    // Existing threads already had metadata written when they were first
+    // created; only newly-minted threadIds need the post-stream PATCH.
+    metadataWritten: threadId !== null,
   })
 
   const queryClient = useQueryClient()
@@ -143,22 +144,20 @@ export function DialogusThread({
 
           const spoiler_caps = readAllSpoilerCaps(effectiveThreadId)
 
-          if (!persistenceRef.current.threadCreated) {
-            persistenceRef.current.threadCreated = true
-            // Fire-and-forget: ensures the thread row exists before/while
-            // Mastra Memory writes messages and runs its own async title
-            // generation (Memory `generateTitle: true`).
-            void ensureMastraThread(effectiveThreadId, currentBookIds).then(() => {
-              queryClient.invalidateQueries({ queryKey: THREADS_QUERY_KEY })
-            })
-          }
+          // Note: thread is created implicitly by the stream (memory.thread).
+          // Metadata is written in onFinish where the thread is guaranteed to
+          // exist — PATCHing before that loses to a race and returns 404.
 
           const requestBody: Record<string, unknown> = {
             ...(body ?? {}),
             messages: messages.map((m) => ({ role: m.role, content: extractMessageText(m) })),
             message: messageText,
-            threadId: effectiveThreadId,
-            resourceId: RESOURCE_ID,
+            // Mastra v1.28 dropped top-level `threadId`/`resourceId` from
+            // /api/agents/:id/stream — they're only honored by the legacy
+            // endpoint. The current endpoint binds memory via `memory`, and
+            // without this binding messages are never persisted and
+            // `generateTitle` never fires.
+            memory: { thread: effectiveThreadId, resource: RESOURCE_ID },
             requestContext: { book_ids: currentBookIds, spoiler_caps },
             // Legacy snake_case mirrors kept for the route's prefix builder.
             book_ids: currentBookIds,
@@ -167,7 +166,7 @@ export function DialogusThread({
           return { body: requestBody }
         },
       }),
-    [queryClient],
+    [],
   )
 
   // Hydrate the runtime with prior turns from Mastra Memory. Computed once
@@ -186,10 +185,21 @@ export function DialogusThread({
       toast.error(error.message || 'Erro durante a conversa')
     },
     onFinish: () => {
-      // Mastra Memory's `generateTitle: true` runs async after the stream
-      // completes. Invalidate so the sidebar replaces the "Nova conversa"
-      // placeholder with the agent-derived title once it's persisted.
-      queryClient.invalidateQueries({ queryKey: THREADS_QUERY_KEY })
+      const { effectiveThreadId, metadataWritten } = persistenceRef.current
+      const { bookIds: currentBookIds } = sendStateRef.current
+      // Write metadata once per thread, only on the first finish. Subsequent
+      // turns must not clobber custom_title / pinned set by the user later.
+      if (effectiveThreadId !== null && !metadataWritten) {
+        persistenceRef.current.metadataWritten = true
+        void writeThreadMetadata(effectiveThreadId, currentBookIds).finally(() => {
+          // Title generation (`generateTitle: true`) is also async; refresh
+          // once the metadata write completes so the sidebar picks up both
+          // the new title and book_ids in one go.
+          queryClient.invalidateQueries({ queryKey: THREADS_QUERY_KEY })
+        })
+      } else {
+        queryClient.invalidateQueries({ queryKey: THREADS_QUERY_KEY })
+      }
     },
   })
 

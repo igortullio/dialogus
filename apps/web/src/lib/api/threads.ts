@@ -11,8 +11,6 @@ import { type Thread, threadListSchema, threadSchema } from './_schemas'
 const FALLBACK_BASE = '/api/library/threads'
 const MASTRA_BASE = '/api/memory/threads'
 const MASTRA_AGENT_ID = 'dialogusAgent'
-const DEFAULT_METADATA: ThreadMetadata = { custom_title: null, pinned: false }
-
 const useMastra: boolean = MASTRA_THREAD_METADATA_AVAILABLE
 
 if (
@@ -98,9 +96,20 @@ interface RawMastraMessage {
 
 function extractText(content: unknown): string {
   if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
+  // Mastra's persisted messages use a v2 envelope: `{ format: 2, parts: [...] }`
+  // where parts contains text segments and tool invocations. We unwrap it
+  // here so older array-shaped payloads (and direct strings) still work.
+  let parts: unknown
+  if (Array.isArray(content)) {
+    parts = content
+  } else if (content && typeof content === 'object') {
+    parts = (content as { parts?: unknown }).parts
+  } else {
+    return ''
+  }
+  if (!Array.isArray(parts)) return ''
   let out = ''
-  for (const part of content) {
+  for (const part of parts) {
     if (part && typeof part === 'object') {
       const p = part as { type?: unknown; text?: unknown }
       if (p.type === 'text' && typeof p.text === 'string') out += p.text
@@ -117,11 +126,17 @@ function extractMessagesArray(raw: unknown): unknown[] {
   return Array.isArray(candidate) ? candidate : []
 }
 
+// Matches the `[Available books: ...]` (optionally `; Spoiler caps: {...}`)
+// prefix that the stream proxy injects into the latest user message. Stripped
+// on hydration so the user sees only what they originally typed.
+const BOOKS_PREFIX_RE = /^\[Available books:[^\]]*\]\n?/
+
 function toThreadMessage(item: RawMastraMessage): ThreadMessage | null {
   const role = item.role
   if (role !== 'user' && role !== 'assistant' && role !== 'system' && role !== 'tool') return null
   if (item.type !== undefined && item.type !== 'text') return null
-  const text = extractText(item.content)
+  const raw = extractText(item.content)
+  const text = role === 'user' ? raw.replace(BOOKS_PREFIX_RE, '') : raw
   if (text.length === 0) return null
   return {
     id: typeof item.id === 'string' ? item.id : '',
@@ -198,7 +213,25 @@ export async function updateThreadMetadata(
   partial: ThreadMetadataUpdate,
 ): Promise<ThreadMetadata> {
   if (useMastra) {
-    const merged: ThreadMetadata = { ...DEFAULT_METADATA, ...partial }
+    // Mastra's PATCH /threads/:id replaces metadata wholesale, so we must
+    // first read the current server state and merge `partial` onto it.
+    // Otherwise unrelated keys (custom_title, book_ids, anything outside
+    // ThreadMetadata) get wiped on every pin/rename mutation. We bypass
+    // parseThread here so unknown keys (book_ids) survive the round-trip.
+    const currentRaw = await mastraFetch(
+      `${MASTRA_BASE}/${id}?agentId=${MASTRA_AGENT_ID}`,
+      { method: 'GET' },
+      (raw: unknown) => raw,
+      'updateThreadMetadata.read',
+    )
+    const currentMetadata =
+      currentRaw && typeof currentRaw === 'object' && 'metadata' in currentRaw
+        ? ((currentRaw as { metadata?: unknown }).metadata ?? {})
+        : {}
+    const merged = {
+      ...(currentMetadata as Record<string, unknown>),
+      ...partial,
+    } as Record<string, unknown>
     const thread = await mastraFetch(
       `${MASTRA_BASE}/${id}?agentId=${MASTRA_AGENT_ID}`,
       {

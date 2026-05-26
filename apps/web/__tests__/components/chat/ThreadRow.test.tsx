@@ -127,7 +127,7 @@ describe('ThreadRow — title rendering', () => {
       thread: makeThread({ title: null }),
     })
     await waitFor(() => {
-      expect(screen.getByText('Conversa sem título')).toBeDefined()
+      expect(screen.getByText('Nova conversa')).toBeDefined()
     })
   })
 })

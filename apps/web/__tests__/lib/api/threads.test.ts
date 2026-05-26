@@ -73,15 +73,34 @@ describe('threads client (Mastra primary path)', () => {
     )
   })
 
-  it('updateThreadMetadata() PATCHes Mastra with merged { custom_title, pinned } body', async () => {
+  it('updateThreadMetadata() reads current metadata then PATCHes Mastra with merged body', async () => {
     const { updateThreadMetadata } = await loadThreads(true)
-    fetchMock.mockResolvedValueOnce(jsonResponse(STORED_THREAD))
+    // First GET: returns the current server metadata (with custom_title and book_ids).
+    // Second PATCH: returns the resulting thread.
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ...STORED_THREAD,
+        metadata: { custom_title: 'Memórias', pinned: false, book_ids: ['book-1'] },
+      }),
+    )
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ...STORED_THREAD,
+        metadata: { custom_title: 'Memórias', pinned: true, book_ids: ['book-1'] },
+      }),
+    )
     const result = await updateThreadMetadata('t_thread_1', { pinned: true })
     expect(result).toEqual({ custom_title: 'Memórias', pinned: true })
-    const init = fetchMock.mock.calls[0]?.[1]
-    expect(init?.method).toBe('PATCH')
-    const body = JSON.parse(init?.body as string) as { metadata: Record<string, unknown> }
-    expect(body.metadata).toEqual({ custom_title: null, pinned: true })
+    expect(fetchMock.mock.calls[0]?.[1]?.method ?? 'GET').toBe('GET')
+    const patchInit = fetchMock.mock.calls[1]?.[1]
+    expect(patchInit?.method).toBe('PATCH')
+    const body = JSON.parse(patchInit?.body as string) as { metadata: Record<string, unknown> }
+    // Existing keys preserved, only `pinned` overridden.
+    expect(body.metadata).toEqual({
+      custom_title: 'Memórias',
+      pinned: true,
+      book_ids: ['book-1'],
+    })
   })
 
   it('fetchThreadMetadata() returns defaults when the thread has no metadata', async () => {

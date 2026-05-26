@@ -49,12 +49,6 @@ export function CitationSidePanel() {
           data-panel-kind="chunk"
           data-panel-side={side}
           side={side}
-          onPointerDownOutside={(event) => {
-            event.preventDefault()
-          }}
-          onInteractOutside={(event) => {
-            event.preventDefault()
-          }}
           className={cn(
             isDesktop ? 'w-full sm:max-w-[480px]' : 'h-3/4 max-h-[80vh]',
             'overflow-y-auto',
@@ -79,12 +73,6 @@ export function CitationSidePanel() {
           data-panel-kind="unresolved"
           data-panel-side={side}
           side={side}
-          onPointerDownOutside={(event) => {
-            event.preventDefault()
-          }}
-          onInteractOutside={(event) => {
-            event.preventDefault()
-          }}
           className={cn(
             isDesktop ? 'w-full sm:max-w-[480px]' : 'h-1/2 max-h-[60vh]',
             'overflow-y-auto',

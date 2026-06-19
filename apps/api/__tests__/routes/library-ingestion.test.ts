@@ -86,10 +86,18 @@ function buildFakeDb(initial: {
     values: idempotencyInsertSpy,
   }))
 
+  // ingestBook flips the row to "downloading" via db.update(...).set(...).where(...)
+  const update = vi.fn().mockImplementation(() => ({
+    set: vi.fn().mockImplementation(() => ({
+      where: vi.fn().mockResolvedValue(undefined),
+    })),
+  }))
+
   const db = {
     query: { books: { findFirst: bookFindFirst } },
     select,
     insert,
+    update,
   } as unknown as Database
 
   return { db, state }

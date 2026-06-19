@@ -28,6 +28,16 @@ export async function ingestBook(
   const enqueueFn = deps.enqueueImpl ?? enqueue
   const jobId = await enqueueFn(deps.enqueueDeps, 'ingestion.download', { bookId })
 
+  // Flip the row to "downloading" right after the job is queued so any
+  // subsequent read (library list, status poll) sees an in-progress book
+  // immediately. Without this the row stayed "discovered" until the worker
+  // picked up the job, leaving the UI on "Aguardando ingestão" for seconds and
+  // letting short books finish before any progress rendered. The worker's
+  // download stage re-affirms this same status, so the write is idempotent.
+  // Ordered after the enqueue: a failed enqueue leaves the book "discovered"
+  // and retryable.
+  await deps.db.update(books).set({ ingestionStatus: 'downloading' }).where(eq(books.id, bookId))
+
   return {
     book_id: bookId,
     status: 'downloading',

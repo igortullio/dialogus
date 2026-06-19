@@ -108,6 +108,13 @@ export function DialogusThread({
     initialBookIds.slice(0, MAX_BOOKS_PER_THREAD),
   )
 
+  // For a new conversation the thread id is minted lazily on first send and
+  // kept in persistenceRef. Mirror it into state once the first turn finishes
+  // so the thread header (book strip + spoiler control) renders this session
+  // instead of only after the user reopens the thread. Kept as local state —
+  // not lifted to the parent's `key` — so the runtime is never remounted.
+  const [createdThreadId, setCreatedThreadId] = useState<string | null>(null)
+
   const sendStateRef = useRef<SendStateRef>({ threadId, bookIds })
   sendStateRef.current = { threadId, bookIds }
 
@@ -187,6 +194,11 @@ export function DialogusThread({
     onFinish: () => {
       const { effectiveThreadId, metadataWritten } = persistenceRef.current
       const { bookIds: currentBookIds } = sendStateRef.current
+      // Brand-new conversation: surface the freshly-minted thread id to the
+      // context so the header renders now (it keys off threadId !== null).
+      if (threadId === null && effectiveThreadId !== null) {
+        setCreatedThreadId(effectiveThreadId)
+      }
       // Write metadata once per thread, only on the first finish. Subsequent
       // turns must not clobber custom_title / pinned set by the user later.
       if (effectiveThreadId !== null && !metadataWritten) {
@@ -203,15 +215,18 @@ export function DialogusThread({
     },
   })
 
+  // Prop id for an existing thread; otherwise the lazily-minted id once the
+  // first turn has created the thread.
+  const resolvedThreadId = threadId ?? createdThreadId
   const contextValue = useMemo<DialogusThreadContextValue>(
     () => ({
-      threadId,
+      threadId: resolvedThreadId,
       bookIds,
       setBookIds,
-      isExistingThread: threadId !== null,
+      isExistingThread: resolvedThreadId !== null,
       openAddBookDrawer,
     }),
-    [threadId, bookIds, setBookIds],
+    [resolvedThreadId, bookIds, setBookIds],
   )
 
   return (

@@ -138,9 +138,10 @@ export function LibraryGrid({ initialData, className }: LibraryGridProps) {
 
       {!query.isError && hasBooks && hasMatches && (
         <ul data-slot="library-grid" className={GRID_CLASSES}>
-          {filtered.map((book) => (
+          {filtered.map((book, index) => (
             <li key={book.id} className="contents">
-              <BookCard book={book} />
+              {/* First row loads covers eagerly for LCP; rest stay lazy. */}
+              <BookCard book={book} priority={index < 4} />
             </li>
           ))}
         </ul>

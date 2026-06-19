@@ -9,6 +9,8 @@ vi.mock('../../../src/lib/api/catalog', () => ({
 
 vi.mock('../../../src/lib/api/library', () => ({
   addBook: vi.fn(),
+  restoreBook: vi.fn(),
+  startIngestion: vi.fn(),
 }))
 
 vi.mock('sonner', () => ({
@@ -24,10 +26,11 @@ import { AddGutendexSheet } from '../../../src/components/library/AddGutendexShe
 import type { Book, GutendexBook } from '../../../src/lib/api/_schemas'
 import type { SearchGutendexResult } from '../../../src/lib/api/catalog'
 import { searchGutendex } from '../../../src/lib/api/catalog'
-import { addBook } from '../../../src/lib/api/library'
+import { addBook, startIngestion } from '../../../src/lib/api/library'
 
 const mockedSearch = vi.mocked(searchGutendex)
 const mockedAdd = vi.mocked(addBook)
+const mockedStartIngestion = vi.mocked(startIngestion)
 
 import { toast } from 'sonner'
 
@@ -100,6 +103,8 @@ beforeEach(() => {
   _resetAddBookDrawerForTests()
   mockedSearch.mockReset()
   mockedAdd.mockReset()
+  mockedStartIngestion.mockReset()
+  mockedStartIngestion.mockResolvedValue({ jobId: 'job-default' })
   mockedToastError.mockReset()
 })
 
@@ -260,6 +265,72 @@ describe('AddGutendexSheet', () => {
       const status = document.querySelector('[data-slot="add-gutendex-row-status"]')
       expect(status?.textContent).toContain('Adicionado')
     })
+  })
+
+  it('"Adicionar" auto-starts ingestion for the freshly added (discovered) book', async () => {
+    const client = makeClient()
+    mockedSearch.mockResolvedValue(makeSearchResult([makeGutendexBook({ id: 42 })]))
+    mockedAdd.mockResolvedValueOnce(
+      makeBook({ id: 'book-42', gutendex_id: 42, ingestion_status: 'discovered' }),
+    )
+    render(
+      <Wrap client={client}>
+        <AddGutendexSheet />
+      </Wrap>,
+    )
+    act(() => {
+      openAddBookDrawer()
+    })
+    await flushDebounce()
+    const addButton = await waitFor(() => {
+      const node = document.querySelector(
+        '[data-slot="add-gutendex-row-add"]',
+      ) as HTMLButtonElement | null
+      if (!node) throw new Error('add button not found')
+      return node
+    })
+    await act(async () => {
+      fireEvent.click(addButton)
+    })
+    await waitFor(() => {
+      expect(mockedStartIngestion).toHaveBeenCalled()
+    })
+    expect(mockedStartIngestion.mock.calls[0]?.[0]).toBe('book-42')
+    expect(mockedStartIngestion.mock.calls[0]?.[1]).toEqual(expect.any(String))
+  })
+
+  it('does not auto-start ingestion when the added/restored book is already ready', async () => {
+    const client = makeClient()
+    mockedSearch.mockResolvedValue(makeSearchResult([makeGutendexBook({ id: 7 })]))
+    mockedAdd.mockResolvedValueOnce(
+      makeBook({ id: 'book-7', gutendex_id: 7, ingestion_status: 'ready' }),
+    )
+    render(
+      <Wrap client={client}>
+        <AddGutendexSheet />
+      </Wrap>,
+    )
+    act(() => {
+      openAddBookDrawer()
+    })
+    await flushDebounce()
+    const addButton = await waitFor(() => {
+      const node = document.querySelector(
+        '[data-slot="add-gutendex-row-add"]',
+      ) as HTMLButtonElement | null
+      if (!node) throw new Error('add button not found')
+      return node
+    })
+    await act(async () => {
+      fireEvent.click(addButton)
+    })
+    await waitFor(() => {
+      expect(mockedAdd).toHaveBeenCalled()
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50)
+    })
+    expect(mockedStartIngestion).not.toHaveBeenCalled()
   })
 
   it('on add error: row enters error state and toast fires', async () => {

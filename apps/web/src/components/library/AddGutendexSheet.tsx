@@ -26,7 +26,7 @@ import {
   type SearchGutendexResult,
   searchGutendex,
 } from '@/lib/api/catalog'
-import { addBook, restoreBook } from '@/lib/api/library'
+import { addBook, restoreBook, startIngestion } from '@/lib/api/library'
 import { cn } from '@/lib/utils'
 import { CoverFallback } from './CoverFallback'
 
@@ -68,6 +68,13 @@ function makeIdempotencyKey(gutendexId: number): string {
     return `add-${gutendexId}-${crypto.randomUUID()}`
   }
   return `add-${gutendexId}-${Date.now()}`
+}
+
+function makeIngestKey(bookId: string): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `ingest-${bookId}-${crypto.randomUUID()}`
+  }
+  return `ingest-${bookId}-${Date.now()}`
 }
 
 function authorList(book: GutendexBook): string {
@@ -327,6 +334,22 @@ export function AddGutendexSheet() {
     onSuccess: (book: Book, gutendexId) => {
       setRowState(gutendexId, 'added')
       syncLibraryCacheWith(book)
+      // Auto-start ingestion so "Adicionado — ingestindo…" is truthful and the
+      // book actually begins ingesting in the background, as the drawer
+      // promises. Only for freshly added books; a restored book that is
+      // already ready/failed keeps its state. The card's "Ingerir" button
+      // remains the fallback if this enqueue fails.
+      if (book.ingestion_status === 'discovered') {
+        startIngestion(book.id, makeIngestKey(book.id))
+          .then(() => {
+            // Refresh the library so the card picks up the now-in-progress
+            // status and starts showing live progress immediately.
+            queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY })
+          })
+          .catch(() => {
+            // The add itself succeeded; ingestion can be retried from the card.
+          })
+      }
     },
     onError: (_error, gutendexId) => {
       setRowState(gutendexId, 'error')

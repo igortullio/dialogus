@@ -280,4 +280,42 @@ describe('BookCard', () => {
     )
     expect(mockedStatus).not.toHaveBeenCalled()
   })
+
+  it('does not freeze on the last in-progress stage after the book reaches ready', async () => {
+    // Reproduces the "stuck at Embeddings 100%" bug: the live poll caches an
+    // in-progress status, then the library refetch flips the prop to terminal.
+    // The fresh terminal prop must win over the now-stale poll cache.
+    const client = makeClient()
+    mockedStatus.mockResolvedValue(
+      makeStatus({
+        book_id: makeBook().id,
+        status: 'embedding',
+        stage: 'embed',
+        progress: 100,
+      }),
+    )
+    const { rerender } = render(
+      <Wrap client={client}>
+        <BookCard book={makeBook({ ingestion_status: 'embedding' })} />
+      </Wrap>,
+    )
+    await waitFor(() => {
+      const bar = document.querySelector('[data-slot="book-card-progress-bar"]')
+      expect(bar?.getAttribute('aria-valuenow')).toBe('100')
+    })
+
+    // Library list now reports the book as ready (terminal) via the prop.
+    rerender(
+      <Wrap client={client}>
+        <BookCard book={makeBook({ ingestion_status: 'ready' })} />
+      </Wrap>,
+    )
+
+    await waitFor(() => {
+      const card = document.querySelector('[data-slot="book-card"]')
+      expect(card?.getAttribute('data-status')).toBe('ready')
+    })
+    expect(document.querySelector('[data-slot="book-card-progress-bar"]')).toBeNull()
+    expect(document.querySelector('[data-slot="book-card-action-details"]')).not.toBeNull()
+  })
 })

@@ -45,9 +45,10 @@ function makeIdempotencyKey(prefix: string, id: string): string {
 
 interface CoverProps {
   readonly book: Book
+  readonly priority?: boolean
 }
 
-function Cover({ book }: CoverProps) {
+function Cover({ book, priority }: CoverProps) {
   const [failed, setFailed] = useState(false)
   if (book.cover_url && !failed) {
     return (
@@ -60,6 +61,9 @@ function Cover({ book }: CoverProps) {
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 200px"
           onError={() => setFailed(true)}
           className="object-cover"
+          // Above-the-fold covers load eagerly so they don't trip Next's LCP
+          // "image should be eager" warning; the rest stay lazy.
+          priority={priority}
           unoptimized
         />
       </div>
@@ -100,9 +104,10 @@ function ProgressBar({ value }: ProgressBarProps) {
 export interface BookCardProps {
   readonly book: Book
   readonly className?: string
+  readonly priority?: boolean
 }
 
-export function BookCard({ book, className }: BookCardProps) {
+export function BookCard({ book, className, priority }: BookCardProps) {
   const queryClient = useQueryClient()
   const [detailsOpen, setDetailsOpen] = useState(false)
 
@@ -118,7 +123,14 @@ export function BookCard({ book, className }: BookCardProps) {
     },
   })
 
-  const liveStatus: IngestionStatus = liveStatusQuery.data?.status ?? book.ingestion_status
+  // Once the library list reports a terminal status, trust it over the live
+  // poll: when the prop flips to ready/failed the poll query is disabled and
+  // its cache freezes on the last in-progress stage (e.g. "Embeddings 100%").
+  // The fresh terminal prop must win so the card settles on Pronto/Falhou.
+  const propIsTerminal = book.ingestion_status === 'ready' || book.ingestion_status === 'failed'
+  const liveStatus: IngestionStatus = propIsTerminal
+    ? book.ingestion_status
+    : (liveStatusQuery.data?.status ?? book.ingestion_status)
   const liveProgress = liveStatusQuery.data?.progress ?? 0
   const inProgress = isInProgress(liveStatus)
   const lastError = liveStatusQuery.data?.error?.message ?? book.ingestion_error ?? null
@@ -158,7 +170,7 @@ export function BookCard({ book, className }: BookCardProps) {
       className={cn('flex h-full flex-col', className)}
     >
       <CardContent className="flex flex-1 flex-col gap-3 p-4">
-        <Cover book={book} />
+        <Cover book={book} priority={priority} />
         <div className="flex flex-col gap-1">
           <h3
             data-slot="book-card-title"
@@ -191,6 +203,7 @@ export function BookCard({ book, className }: BookCardProps) {
               data-slot="book-card-action-ingest"
               onClick={() => ingestMutation.mutate()}
               disabled={ingestMutation.isPending}
+              className="min-h-10"
             >
               {INGEST_LABEL}
             </Button>
@@ -203,7 +216,7 @@ export function BookCard({ book, className }: BookCardProps) {
                 variant="outline"
                 data-slot="book-card-action-details"
                 onClick={() => setDetailsOpen(true)}
-                className="flex-1"
+                className="min-h-10 flex-1"
               >
                 {DETAILS_LABEL}
               </Button>

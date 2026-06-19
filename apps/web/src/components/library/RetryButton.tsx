@@ -87,7 +87,7 @@ export function RetryButton({
         variant="outline"
         data-slot="book-card-action-retry"
         onClick={() => setOpen(true)}
-        className={cn(className)}
+        className={cn('min-h-10', className)}
       >
         {triggerLabel}
       </Button>

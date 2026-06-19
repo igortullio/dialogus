@@ -62,7 +62,7 @@ export function RemoveBookDialog({
         variant="ghost"
         data-slot="book-card-action-remove"
         onClick={() => setOpen(true)}
-        className={cn(className)}
+        className={cn('min-h-10', className)}
       >
         {triggerLabel}
       </Button>

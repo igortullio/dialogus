@@ -64,7 +64,11 @@ export function DialogusComposer({
           )}
         />
         <div className="flex items-center justify-between">
-          <span className="text-muted-foreground text-xs">⌘+Enter para enviar</span>
+          {/* Hidden on touch devices, where there is no ⌘/Enter to press —
+              users tap the send button instead. */}
+          <span className="text-muted-foreground text-xs [@media(pointer:coarse)]:hidden">
+            ⌘+Enter para enviar
+          </span>
           <div className="flex items-center gap-2">
             {renderCancelButton(isRunning)}
             {renderSendButton(sendDisabled, noBooksSelected)}

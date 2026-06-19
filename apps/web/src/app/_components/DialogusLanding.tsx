@@ -203,10 +203,11 @@ export function DialogusLanding() {
   }, [])
 
   return (
-    <div
-      data-slot="dialogus-landing"
-      className="flex h-screen w-full overflow-hidden bg-background"
-    >
+    // h-dvh (dynamic viewport height) instead of h-screen (100vh): on mobile
+    // browsers 100vh ignores the dynamic toolbar, which pushed the chat
+    // composer under the address bar / behind the on-screen keyboard. dvh
+    // tracks the actually-visible area so the input stays reachable.
+    <div data-slot="dialogus-landing" className="flex h-dvh w-full overflow-hidden bg-background">
       <div
         data-slot="dialogus-desktop-sidebar"
         className="hidden h-full w-[280px] shrink-0 lg:flex"

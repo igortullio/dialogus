@@ -11,6 +11,7 @@ const bossGetQueueMock = vi.hoisted(() => vi.fn())
 const bossCreateQueueMock = vi.hoisted(() => vi.fn())
 const bossScheduleMock = vi.hoisted(() => vi.fn())
 const bossWorkMock = vi.hoisted(() => vi.fn())
+const bossOnMock = vi.hoisted(() => vi.fn())
 const createPgBossMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@dialogus/db', async (importOriginal) => {
@@ -122,6 +123,7 @@ beforeEach(() => {
   bossCreateQueueMock.mockReset().mockResolvedValue(undefined)
   bossScheduleMock.mockReset().mockResolvedValue(undefined)
   bossWorkMock.mockReset().mockResolvedValue('worker-id')
+  bossOnMock.mockReset()
   createPgBossMock.mockReset().mockImplementation(() => ({
     start: bossStartMock,
     stop: bossStopMock,
@@ -129,6 +131,7 @@ beforeEach(() => {
     createQueue: bossCreateQueueMock,
     schedule: bossScheduleMock,
     work: bossWorkMock,
+    on: bossOnMock,
   }))
 })
 

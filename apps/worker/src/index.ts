@@ -79,6 +79,17 @@ export function createWorkerLogger(level: string): Logger {
   })
 }
 
+export function attachBossErrorHandler(boss: PgBoss, logger: Logger): void {
+  // pg-boss is an EventEmitter; an unhandled 'error' event (e.g. a transient
+  // Postgres connection drop on the long-lived worker pool, which Node turns
+  // into a thrown exception) would otherwise crash the process and silently
+  // stall all ingestion with jobs stuck in "created". Log it and keep running —
+  // pg-boss manages its own reconnection.
+  boss.on('error', (error) => {
+    logger.error({ error, event: 'pgboss_error' }, 'pg-boss emitted an error; worker continuing')
+  })
+}
+
 async function ensureQueue(boss: PgBoss, name: string): Promise<void> {
   const existing = await boss.getQueue(name)
   if (existing == null) {
@@ -166,6 +177,7 @@ export async function start(options: StartOptions = {}): Promise<BootResult> {
   const logger = options.logger ?? createWorkerLogger(config.LOG_LEVEL)
   const db = createDatabase(config.DATABASE_URL)
   const boss = createPgBoss(config.DATABASE_URL)
+  attachBossErrorHandler(boss, logger)
 
   await boss.start()
 

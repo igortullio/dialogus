@@ -53,7 +53,8 @@
       "!**/next-env.d.ts",
       "!**/*.gen.ts",
       "!**/drizzle",
-      "!**/.compozy"
+      "!**/.compozy",
+      "!**/.specify"
     ]
   }
 }

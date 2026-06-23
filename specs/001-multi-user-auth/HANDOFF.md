@@ -91,7 +91,10 @@ never run Better Auth's own migrate.
 Then read `HANDOFF.md` + `tasks.md` (Phase 5) + `contracts/admin-invitations.md` + `data-model.md` and proceed.
 
 ### Status snapshot (for the resuming session)
-Foundational (T001–T015) ✅ · US1 (T016–T025) ✅ · **US2 (T026–T039) ✅** · **US3 (T040–T048) ✅** · **US4 (T049–T054) ✅ complete**
+Foundational (T001–T015) ✅ · US1 (T016–T025) ✅ · **US2 (T026–T039) ✅** · **US3 (T040–T048) ✅** · **US4 (T049–T054) ✅** · **Polish (T055–T062) ✅ (T060/T062 live-stack/CI-validated)**
+Polish commits: `20f9765` account-deletion API + cascade test, `391c6f0` admin delete UI, `c441f2d` ADRs + README + reset rate-limit, `a6cca9b` T059 coverage + T062 concurrency E2E.
+**Feature 001-multi-user-auth is functionally complete.** Remaining are live-stack validations: the full `quickstart.md` 1–8 run + Lighthouse a11y (T060) and the ≥10-user concurrency E2E (T062) — both authored + typecheck-validated, executed in CI / manual. Open follow-ups (low risk, documented): rate-limit the Hono `/api/invitations/accept` endpoint; the last-admin guard is read-then-write (TOCTOU under simultaneous admin requests); admin panels render only the first page (server paginates); admins can act on themselves; the pre-existing intermittent web-test flake under the all-package concurrent pre-commit run.
+
 (US3: `bcf462e` allowlist+services+hooks, `c69970f` admin/accept routes, `4ec46b8` accept-invite+admin UI, `5a67eb2` review remediation.
 US4: `96e7ae4` session lifecycle + sliding inactivity, `fbd0f13` reset-password flow + proxy exclusions). Polish (T055–T062) ⬜.
 

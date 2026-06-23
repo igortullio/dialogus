@@ -6,6 +6,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc --build",
     "start": "node dist/index.js",
+    "seed:owner": "tsx src/infrastructure/auth/seed-owner.ts",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit"
@@ -16,9 +17,11 @@
     "@dialogus/ingestion": "workspace:*",
     "@dialogus/shared": "workspace:*",
     "@hono/node-server": "^1.13.0",
+    "better-auth": "^1.6.20",
     "drizzle-orm": "^0.45.0",
     "hono": "^4.12.0",
     "pino": "^9.0.0",
+    "resend": "^6.14.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {

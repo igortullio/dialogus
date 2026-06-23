@@ -7,8 +7,10 @@ import {
 import {
   ConfigError,
   DialogusError,
+  ForbiddenError,
   IdempotencyKeyConflictError,
   InvalidCursorError,
+  UnauthorizedError,
   ValidationError,
 } from '@dialogus/shared/errors'
 import {
@@ -93,6 +95,22 @@ function mapIngestionDialogusError(err: DialogusError, path: string): MappedErro
   return mapped
 }
 
+function mapAuthError(err: Error, path: string): MappedError | null {
+  if (err instanceof UnauthorizedError) {
+    return {
+      body: { ...problemDetails('unauthorized', 401, err.message), instance: path },
+      status: 401,
+    }
+  }
+  if (err instanceof ForbiddenError) {
+    return {
+      body: { ...problemDetails('forbidden', 403, err.message), instance: path },
+      status: 403,
+    }
+  }
+  return null
+}
+
 function mapError(err: Error, path: string): MappedError {
   if (err instanceof DuplicateBookError) {
     const body: ProblemBody = {
@@ -109,6 +127,9 @@ function mapError(err: Error, path: string): MappedError {
       status: 404,
     }
   }
+
+  const authMapped = mapAuthError(err, path)
+  if (authMapped !== null) return authMapped
 
   if (err instanceof GutendexUpstreamError) {
     return {

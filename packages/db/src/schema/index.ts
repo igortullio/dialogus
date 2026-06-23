@@ -1,3 +1,4 @@
+export { account, rateLimit, session, user, verification } from './auth'
 export {
   type BookAuthor,
   books,

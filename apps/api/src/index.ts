@@ -8,11 +8,14 @@ import { type ServerType, serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { type Logger, pino, stdSerializers } from 'pino'
+import { createAuth } from './infrastructure/auth/auth'
+import { selectEmailProvider } from './infrastructure/email'
 import {
   createProblemMiddleware,
   type ProblemVariables,
 } from './infrastructure/http/middleware/problem'
 import { type RequestIdVariables, requestId } from './infrastructure/http/middleware/request-id'
+import { createAuthRoute } from './infrastructure/http/routes/auth'
 import { createCatalogRoute } from './infrastructure/http/routes/catalog'
 import { createHealthRoute } from './infrastructure/http/routes/health'
 import { createLibraryRoute } from './infrastructure/http/routes/library'
@@ -72,6 +75,9 @@ export async function start(options: StartOptions = {}): Promise<BootResult> {
       origin: config.WEB_ORIGIN,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Idempotency-Key', 'Authorization'],
+      // Required so the browser sends/stores the Better Auth session cookie on
+      // cross-origin calls; origin must stay explicit (never '*') with credentials.
+      credentials: true,
       maxAge: 600,
     }),
   )
@@ -156,7 +162,20 @@ export async function main(): Promise<void> {
   try {
     loadEnvFromRoot()
     const config = loadConfig()
+    const logger = createApiLogger(config.LOG_LEVEL)
     const db = createDatabase(config.DATABASE_URL)
+
+    const email = selectEmailProvider({
+      nodeEnv: config.NODE_ENV,
+      emailProviderEnv: config.EMAIL_PROVIDER,
+      resendApiKey: config.RESEND_API_KEY,
+      emailFrom: config.EMAIL_FROM,
+      logger,
+    })
+    logger.info({ choice: email.choice, source: email.source }, 'email_provider_selected')
+
+    const auth = createAuth({ db, config, emailProvider: email.provider, logger })
+    const authApp = createAuthRoute(auth)
 
     const repository = new DrizzleBookRepository(db)
     const gutendexClient = new GutendexHttpClient()
@@ -175,7 +194,9 @@ export async function main(): Promise<void> {
 
     const boot = await start({
       db,
+      logger,
       routes: [
+        { prefix: '/api/auth', app: authApp },
         { prefix: '/api/catalog', app: catalogApp },
         { prefix: '/api/library', app: libraryApp },
       ],

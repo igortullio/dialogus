@@ -13,6 +13,18 @@ export class ConfigError extends DialogusError {}
 export class NotFoundError extends DialogusError {}
 export class ValidationError extends DialogusError {}
 
+export class UnauthorizedError extends DialogusError {
+  constructor(message = 'Authentication required') {
+    super('UNAUTHORIZED', message)
+  }
+}
+
+export class ForbiddenError extends DialogusError {
+  constructor(message = 'You do not have permission to perform this action') {
+    super('FORBIDDEN', message)
+  }
+}
+
 export class InvalidCursorError extends DialogusError {
   constructor(
     public readonly cursor: string,

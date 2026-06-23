@@ -30,6 +30,30 @@ export const envSchema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
+
+  // --- Auth (feature 001-multi-user-auth) ---
+  // Public base URL of the web app; used to build absolute invite/reset links
+  // and as a default Better Auth trusted origin.
+  APP_URL: z.string().url().default('http://localhost:3000'),
+  // Comma-separated extra trusted origins for Better Auth CSRF/origin checks.
+  AUTH_TRUSTED_ORIGINS: z.string().optional(),
+  // Secret Better Auth uses to sign sessions/cookies/tokens. Guarded as
+  // required in production at the point of use (see infrastructure/auth/auth.ts).
+  BETTER_AUTH_SECRET: z.string().optional(),
+  // Secret the Mastra server uses to verify forwarded sessions → resourceId.
+  MASTRA_AUTH_SECRET: z.string().optional(),
+  // Session inactivity / maximum age (default 7 days) and auth-abuse limit.
+  SESSION_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(604_800),
+  AUTH_RATE_LIMIT_SIGNIN_MAX: z.coerce.number().int().positive().default(5),
+  // Max simultaneous in-flight ingestions a single user may have (FR-021).
+  INGESTION_USER_CONCURRENCY_LIMIT: z.coerce.number().int().positive().default(2),
+
+  // --- Email (invitations + password reset) ---
+  // 'mock' logs the link (deterministic for dev/CI); 'resend' really sends.
+  // Absent → 'resend' in production, else 'mock' (resolved in selectEmailProvider).
+  EMAIL_PROVIDER: z.enum(['mock', 'resend']).optional(),
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().optional(),
 })
 
 export type DialogusEnv = z.infer<typeof envSchema>

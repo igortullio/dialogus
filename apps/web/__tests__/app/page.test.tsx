@@ -19,15 +19,29 @@ vi.mock('../../src/lib/library', () => ({
   fetchLibraryCountByStatus: vi.fn(),
 }))
 
+vi.mock('../../src/lib/auth-session', () => ({
+  getServerSession: vi.fn(),
+}))
+
+vi.mock('next/navigation', () => ({
+  redirect: vi.fn(() => {
+    throw new Error('NEXT_REDIRECT')
+  }),
+}))
+
 const { listThreads } = await import('../../src/lib/api/threads')
 const { fetchHealth } = await import('../../src/lib/health')
 const { fetchLibraryCount, fetchLibraryCountByStatus } = await import('../../src/lib/library')
+const { getServerSession } = await import('../../src/lib/auth-session')
+const { redirect } = await import('next/navigation')
 const { default: Page } = await import('../../src/app/page')
 
 const mockedListThreads = vi.mocked(listThreads)
 const mockedFetchHealth = vi.mocked(fetchHealth)
 const mockedFetchLibraryCount = vi.mocked(fetchLibraryCount)
 const mockedFetchLibraryCountByStatus = vi.mocked(fetchLibraryCountByStatus)
+const mockedGetServerSession = vi.mocked(getServerSession)
+const mockedRedirect = vi.mocked(redirect)
 
 const HEALTH_UP = { api: 'up', db: 'up', pgboss: 'up', mastra: 'up' } as const
 
@@ -40,6 +54,11 @@ beforeEach(() => {
   mockedFetchLibraryCount.mockResolvedValue(0)
   mockedFetchLibraryCountByStatus.mockReset()
   mockedFetchLibraryCountByStatus.mockResolvedValue({ ready: 0, total: 0 })
+  mockedGetServerSession.mockReset()
+  mockedGetServerSession.mockResolvedValue({
+    user: { id: 'u1', email: 'owner@dialogus.test', name: 'Owner', role: 'admin' },
+  })
+  mockedRedirect.mockClear()
 })
 
 afterEach(() => {
@@ -54,6 +73,13 @@ describe('apps/web landing Page (Server Component shell)', () => {
   it('does not declare a "use client" directive', () => {
     const source = readFileSync(join(__dirname, '../../src/app/page.tsx'), 'utf8')
     expect(source).not.toMatch(/['"]use client['"]/)
+  })
+
+  it('redirects to /sign-in when there is no authenticated session (FR-001)', async () => {
+    mockedGetServerSession.mockResolvedValueOnce(null)
+    await expect(Page()).rejects.toThrow('NEXT_REDIRECT')
+    expect(mockedRedirect).toHaveBeenCalledWith('/sign-in')
+    expect(mockedListThreads).not.toHaveBeenCalled()
   })
 
   it('renders without throwing and prefetches the threads query', async () => {

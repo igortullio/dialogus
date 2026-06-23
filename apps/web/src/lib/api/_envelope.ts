@@ -85,6 +85,10 @@ function buildRequestInit(options: RequestOptions): RequestInit {
     method: options.method ?? 'GET',
     headers,
     cache: 'no-store',
+    // Carry the Better Auth session cookie. Harmless same-origin; required for
+    // the cross-origin dev fallback. SSR callers also forward the inbound
+    // Cookie header via options.headers (see the route gate in US1).
+    credentials: 'include',
   }
   if (body !== undefined) init.body = body
   return init

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { AccountMenu } from '@/components/auth/AccountMenu'
 import { AddGutendexSheet } from '@/components/library/AddGutendexSheet'
 import { IngestionMonitor } from '@/components/library/IngestionMonitor'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           disableTransitionOnChange
         >
           <QueryClientProvider>
+            <AccountMenu />
             {children}
             <AddGutendexSheet />
             <IngestionMonitor />

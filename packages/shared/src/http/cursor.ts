@@ -8,7 +8,9 @@ export interface CursorPosition {
 
 export const cursorPayloadSchema = z.object({
   createdAt: z.iso.datetime(),
-  id: z.uuid(),
+  // Accepts any non-empty id string: corpus rows use uuid PKs, but Better Auth
+  // `user`/member ids are non-UUID `text` (admin member-list pagination, US3).
+  id: z.string().min(1),
 })
 
 export function encodeCursor(position: CursorPosition): string {

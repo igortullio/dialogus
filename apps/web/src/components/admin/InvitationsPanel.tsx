@@ -54,7 +54,10 @@ export function InvitationsPanel() {
 
   const revokeMutation = useMutation({
     mutationFn: (id: string) => revokeInvitation(id),
-    onSuccess: () => invalidate(),
+    onSuccess: () => {
+      setError(null)
+      return invalidate()
+    },
     onError: () => setError('Não foi possível revogar este convite.'),
   })
 

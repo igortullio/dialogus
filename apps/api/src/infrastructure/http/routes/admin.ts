@@ -84,10 +84,16 @@ function nextLinks(
   path: string,
   limit: number,
   nextCursor: { createdAt: Date; id: string } | null,
+  extra: Record<string, string | undefined> = {},
 ) {
   const links: Record<string, string> = { self: path }
   if (nextCursor !== null) {
-    links.next = `${path}?cursor=${encodeCursor(nextCursor)}&limit=${limit}`
+    const params = new URLSearchParams({ cursor: encodeCursor(nextCursor), limit: String(limit) })
+    // Carry filters (e.g. ?status=) into the next page so pagination stays scoped.
+    for (const [key, value] of Object.entries(extra)) {
+      if (value !== undefined) params.set(key, value)
+    }
+    links.next = `${path}?${params.toString()}`
   }
   return links
 }
@@ -132,7 +138,7 @@ export function createAdminRoute(deps: AdminRouteDeps): Hono {
     return c.json(
       envelope(page.items.map(toInvitationDto), {
         meta: { count: page.items.length },
-        links: nextLinks(c.req.path, query.limit, page.nextCursor),
+        links: nextLinks(c.req.path, query.limit, page.nextCursor, { status: query.status }),
       }),
       200,
     )

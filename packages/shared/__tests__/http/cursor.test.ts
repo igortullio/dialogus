@@ -56,10 +56,15 @@ describe('encodeCursor / decodeCursor', () => {
     expect(() => decodeCursor(cursor)).toThrow(InvalidCursorError)
   })
 
-  it('throws InvalidCursorError when id is not a UUID', () => {
+  it('accepts a non-UUID string id (Better Auth member ids are text, US3)', () => {
     const cursor = base64url(
-      JSON.stringify({ createdAt: VALID_DATE.toISOString(), id: 'not-a-uuid' }),
+      JSON.stringify({ createdAt: VALID_DATE.toISOString(), id: 'kQ7t9nanoid-member-id' }),
     )
+    expect(decodeCursor(cursor).id).toBe('kQ7t9nanoid-member-id')
+  })
+
+  it('throws InvalidCursorError when id is an empty string', () => {
+    const cursor = base64url(JSON.stringify({ createdAt: VALID_DATE.toISOString(), id: '' }))
     expect(() => decodeCursor(cursor)).toThrow(InvalidCursorError)
   })
 

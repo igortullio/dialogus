@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ApiError } from '@/lib/api/_error'
 import {
   fetchMembers,
   type Member,
@@ -11,6 +12,13 @@ import {
   revokeMember,
   setMemberRole,
 } from '@/lib/api/admin'
+
+function errorMessageFor(error: unknown): string {
+  if (error instanceof ApiError && error.slug === 'last-admin') {
+    return 'Ação não permitida: o sistema precisa manter ao menos um administrador.'
+  }
+  return 'Não foi possível concluir a ação. Tente novamente.'
+}
 
 const MEMBERS_KEY = ['admin', 'members'] as const
 
@@ -25,32 +33,31 @@ export function MembersPanel() {
     return queryClient.invalidateQueries({ queryKey: MEMBERS_KEY })
   }
 
-  function onMutationError() {
-    setError('Ação não permitida. O sistema precisa manter ao menos um administrador.')
+  function onSuccess() {
+    setError(null)
+    return invalidate()
+  }
+
+  function onMutationError(error: unknown) {
+    setError(errorMessageFor(error))
   }
 
   const revokeMutation = useMutation({
     mutationFn: (id: string) => revokeMember(id),
-    onSuccess: () => {
-      setError(null)
-      return invalidate()
-    },
+    onSuccess,
     onError: onMutationError,
   })
 
   const restoreMutation = useMutation({
     mutationFn: (id: string) => restoreMember(id),
-    onSuccess: () => invalidate(),
+    onSuccess,
     onError: onMutationError,
   })
 
   const roleMutation = useMutation({
     mutationFn: (input: { id: string; role: 'admin' | 'member' }) =>
       setMemberRole(input.id, input.role),
-    onSuccess: () => {
-      setError(null)
-      return invalidate()
-    },
+    onSuccess,
     onError: onMutationError,
   })
 

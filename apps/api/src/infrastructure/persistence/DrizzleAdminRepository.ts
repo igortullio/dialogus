@@ -1,6 +1,7 @@
 import type { Database } from '@dialogus/db'
 import { invitations, securityEvents, session, user } from '@dialogus/db/schema'
 import { and, desc, eq, type SQL, sql } from 'drizzle-orm'
+import { InvitationConflictError } from '../../application/admin/errors'
 import type {
   AdminRepository,
   CreateInvitationInput,
@@ -14,6 +15,11 @@ import type {
 } from '../../application/admin/ports'
 
 type InvitationRow = typeof invitations.$inferSelect
+
+/** Postgres unique-violation SQLSTATE (surfaced by postgres-js on `error.code`). */
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === '23505'
+}
 
 function toInvitation(row: InvitationRow): InvitationRecord {
   return {
@@ -57,12 +63,34 @@ export class DrizzleAdminRepository implements AdminRepository {
   }
 
   async createInvitation(input: CreateInvitationInput): Promise<InvitationRecord> {
-    const [row] = await this.db
-      .insert(invitations)
-      .values({ email: input.email, invitedBy: input.invitedBy, expiresAt: input.expiresAt })
-      .returning()
-    if (!row) throw new Error('failed to create invitation')
-    return toInvitation(row)
+    try {
+      const [row] = await this.db
+        .insert(invitations)
+        .values({ email: input.email, invitedBy: input.invitedBy, expiresAt: input.expiresAt })
+        .returning()
+      if (!row) throw new Error('failed to create invitation')
+      return toInvitation(row)
+    } catch (error) {
+      // Concurrent create racing the partial UNIQUE(email) WHERE status='pending'
+      // index → surface the domain conflict instead of a raw 23505 (→ 500).
+      if (isUniqueViolation(error)) {
+        throw new InvitationConflictError('A live invitation already exists for this email')
+      }
+      throw error
+    }
+  }
+
+  async expireStalePendingInvitations(email: string): Promise<void> {
+    await this.db
+      .update(invitations)
+      .set({ status: 'expired' })
+      .where(
+        and(
+          eq(invitations.email, email),
+          eq(invitations.status, 'pending'),
+          sql`${invitations.expiresAt} <= now()`,
+        ),
+      )
   }
 
   async listInvitations(input: ListInvitationsInput): Promise<CursorPage<InvitationRecord>> {
@@ -106,10 +134,18 @@ export class DrizzleAdminRepository implements AdminRepository {
   }
 
   async consumeInvitationByEmail(email: string, userId: string): Promise<void> {
+    // Only an OPEN invite (pending AND unexpired) is consumable, matching the
+    // gate that admitted the account — never flip an expired row to `used`.
     await this.db
       .update(invitations)
       .set({ status: 'used', consumedByUserId: userId })
-      .where(and(eq(invitations.email, email), eq(invitations.status, 'pending')))
+      .where(
+        and(
+          eq(invitations.email, email),
+          eq(invitations.status, 'pending'),
+          sql`${invitations.expiresAt} > now()`,
+        ),
+      )
   }
 
   async userExistsByEmail(email: string): Promise<boolean> {

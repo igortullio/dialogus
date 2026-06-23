@@ -78,6 +78,12 @@ export interface AdminRepository {
   findOpenInvitationByEmail(email: string): Promise<InvitationRecord | null>
   findInvitationById(id: string): Promise<InvitationRecord | null>
   createInvitation(input: CreateInvitationInput): Promise<InvitationRecord>
+  /**
+   * Lazily transition this email's pending-but-past-`expires_at` rows to
+   * `expired`, so a fresh invitation can be issued without colliding with the
+   * partial `UNIQUE(email) WHERE status='pending'` index (FR-016 state machine).
+   */
+  expireStalePendingInvitations(email: string): Promise<void>
   listInvitations(input: ListInvitationsInput): Promise<CursorPage<InvitationRecord>>
   /** Transition an invitation to a terminal/`used` status; returns the updated row. */
   setInvitationStatus(

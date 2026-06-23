@@ -123,6 +123,24 @@ describe('GET /admin/invitations', () => {
     expect(body.data).toHaveLength(1)
     expect(body.data[0]?.status).toBe('revoked')
   })
+
+  it('preserves the status filter in the next-page link (cursor pagination)', async () => {
+    const repo = fakeAdminRepo({
+      invitations: [
+        makeInvitation({ status: 'revoked', email: 'r1@test.local' }),
+        makeInvitation({ status: 'revoked', email: 'r2@test.local' }),
+      ],
+    })
+    const app = buildApp(repo)
+
+    const res = await app.request('/admin/invitations?status=revoked&limit=1')
+    const body = (await res.json()) as { data: unknown[]; links?: { next?: string } }
+
+    expect(body.data).toHaveLength(1)
+    expect(body.links?.next).toBeTruthy()
+    expect(body.links?.next).toContain('status=revoked')
+    expect(body.links?.next).toContain('cursor=')
+  })
 })
 
 describe('DELETE /admin/invitations/:id', () => {

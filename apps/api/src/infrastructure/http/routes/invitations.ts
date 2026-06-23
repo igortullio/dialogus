@@ -1,4 +1,5 @@
 import { envelope } from '@dialogus/shared/http/envelope'
+import { APIError } from 'better-auth/api'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { InvitationInvalidError } from '../../../application/admin/errors'
@@ -48,11 +49,19 @@ export function createInvitationsRoute(deps: InvitationsRouteDeps): Hono {
 
   app.post('/accept', async (c) => {
     const body = acceptRequestSchema.parse(await c.req.json())
-    const { userId } = await acceptInvitation(
-      { repo: deps.repo, createAccount: deps.createAccount },
-      { invitationId: body.invitation, name: body.name, password: body.password },
-    )
-    return c.json(envelope({ user_id: userId }), 201)
+    try {
+      const { userId } = await acceptInvitation(
+        { repo: deps.repo, createAccount: deps.createAccount },
+        { invitationId: body.invitation, name: body.name, password: body.password },
+      )
+      return c.json(envelope({ user_id: userId }), 201)
+    } catch (error) {
+      // Race: the invite was consumed/revoked between validation and account
+      // creation, so the allowlist hook rejected with a Better Auth APIError —
+      // surface it as `invitation-invalid` (410) instead of a generic 500.
+      if (error instanceof APIError) throw new InvitationInvalidError()
+      throw error
+    }
   })
 
   return app

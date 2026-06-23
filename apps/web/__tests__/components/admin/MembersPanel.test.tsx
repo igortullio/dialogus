@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MembersPanel } from '../../../src/components/admin/MembersPanel'
+import { ApiError } from '../../../src/lib/api/_error'
 import { makeTestQueryClient, QueryWrapper } from '../chat/_helpers'
 
 vi.mock('../../../src/lib/api/admin', () => ({
@@ -86,18 +87,31 @@ describe('MembersPanel', () => {
     await waitFor(() => expect(setMemberRole).toHaveBeenCalledWith('m1', 'admin'))
   })
 
-  it('surfaces the last-admin error when a mutation is rejected', async () => {
+  it('surfaces the specific last-admin message for a last-admin ApiError', async () => {
     vi.mocked(fetchMembers).mockResolvedValue({
       members: [{ ...MEMBER, id: 'admin-1', email: 'admin@test.local', role: 'admin' }],
       nextCursor: null,
     })
-    vi.mocked(setMemberRole).mockRejectedValue(new Error('last admin'))
+    vi.mocked(setMemberRole).mockRejectedValue(new ApiError(409, { slug: 'last-admin' }))
 
     renderPanel()
     await screen.findByText('admin@test.local')
 
     fireEvent.click(screen.getByRole('button', { name: /tornar membro/i }))
 
-    expect(await screen.findByRole('alert')).toBeTruthy()
+    expect(await screen.findByText(/ao menos um administrador/i)).toBeTruthy()
+  })
+
+  it('shows a generic message for a non-last-admin failure (not the last-admin string)', async () => {
+    vi.mocked(fetchMembers).mockResolvedValue({ members: [MEMBER], nextCursor: null })
+    vi.mocked(revokeMember).mockRejectedValue(new ApiError(404, { slug: 'member-not-found' }))
+
+    renderPanel()
+    await screen.findByText('m@test.local')
+
+    fireEvent.click(screen.getByRole('button', { name: /revogar/i }))
+
+    expect(await screen.findByText(/não foi possível concluir a ação/i)).toBeTruthy()
+    expect(screen.queryByText(/ao menos um administrador/i)).toBeNull()
   })
 })

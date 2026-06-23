@@ -76,6 +76,14 @@ export function fakeAdminRepo(
       return record
     },
 
+    async expireStalePendingInvitations(email) {
+      state.invitations = state.invitations.map((i) =>
+        i.email === email && i.status === 'pending' && i.expiresAt.getTime() <= FAKE_NOW.getTime()
+          ? { ...i, status: 'expired', updatedAt: FAKE_NOW }
+          : i,
+      )
+    },
+
     async listInvitations(input: ListInvitationsInput): Promise<CursorPage<InvitationRecord>> {
       const filtered = state.invitations
         .filter((i) => (input.status ? i.status === input.status : true))

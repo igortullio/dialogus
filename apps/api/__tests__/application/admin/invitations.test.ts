@@ -79,6 +79,26 @@ describe('createInvitation', () => {
       createInvitation(svcDeps(repo), { email: 'pending@example.com', invitedBy: 'admin-1' }),
     ).rejects.toMatchObject({ code: 'INVITATION_CONFLICT' })
   })
+
+  it('re-issues for an email whose prior pending invite has expired (flips stale → expired)', async () => {
+    const stale = makeInvitation({
+      email: 'lapsed@example.com',
+      status: 'pending',
+      expiresAt: new Date(FIXED_NOW.getTime() - 3600 * 1000), // expired
+    })
+    const repo = fakeAdminRepo({ invitations: [stale] })
+
+    const fresh = await createInvitation(svcDeps(repo), {
+      email: 'lapsed@example.com',
+      invitedBy: 'admin-1',
+    })
+
+    expect(fresh.status).toBe('pending')
+    expect(repo.state.invitations.find((i) => i.id === stale.id)?.status).toBe('expired')
+    const pending = repo.state.invitations.filter((i) => i.status === 'pending')
+    expect(pending).toHaveLength(1)
+    expect(pending[0]?.id).toBe(fresh.id)
+  })
 })
 
 describe('revokeInvitation', () => {

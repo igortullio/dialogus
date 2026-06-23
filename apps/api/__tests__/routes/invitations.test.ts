@@ -1,4 +1,5 @@
 import { PROBLEM_TYPE_PREFIX } from '@dialogus/shared/http/problem'
+import { APIError } from 'better-auth/api'
 import { Hono } from 'hono'
 import { pino } from 'pino'
 import { describe, expect, it, vi } from 'vitest'
@@ -105,6 +106,24 @@ describe('POST /invitations/accept', () => {
 
     expect(res.status).toBe(410)
     expect(createAccount).not.toHaveBeenCalled()
+  })
+
+  it('maps a Better Auth APIError from account creation to invitation-invalid (410, race)', async () => {
+    const inv = makeInvitation({ status: 'pending', expiresAt: FUTURE })
+    const createAccount = vi.fn(async () => {
+      throw new APIError('FORBIDDEN', { message: 'No valid invitation exists for this email' })
+    })
+    const app = buildApp(fakeAdminRepo({ invitations: [inv] }), createAccount)
+
+    const res = await postAccept(app, {
+      invitation: inv.id,
+      name: 'Race',
+      password: 'StrongPass123!',
+    })
+    const body = (await res.json()) as Record<string, unknown>
+
+    expect(res.status).toBe(410)
+    expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}invitation-invalid`)
   })
 
   it('returns 400 validation-failed for a too-short password', async () => {

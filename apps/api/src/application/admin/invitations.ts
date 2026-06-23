@@ -38,6 +38,10 @@ export async function createInvitation(
 ): Promise<InvitationRecord> {
   const email = normalizeEmail(command.email)
 
+  // Re-issuing after a prior invite lapsed: flip stale pending→expired first so
+  // the new pending row doesn't collide with the partial-unique index (FR-016).
+  await deps.repo.expireStalePendingInvitations(email)
+
   if (await deps.repo.userExistsByEmail(email)) {
     throw new InvitationConflictError('An account already exists for this email')
   }

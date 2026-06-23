@@ -180,6 +180,38 @@ describe.skipIf(!dockerAvailable)(
       ).rejects.toMatchObject({ code: 'INVITATION_INVALID' })
     })
 
+    it('re-invites an email whose prior pending invite expired, and conflicts on a live one (FR-016)', async () => {
+      const { deps } = inviteDeps()
+
+      // A stale pending-but-expired row (the lazy state machine never flipped it).
+      await pg.db.insert(invitations).values({
+        email: 'relapse@test.local',
+        invitedBy: adminId,
+        status: 'pending',
+        expiresAt: new Date(Date.now() - 60_000),
+      })
+
+      // Re-issuing succeeds: the stale row is flipped to 'expired', a fresh
+      // pending row is created (no raw 23505 from the partial-unique index).
+      const fresh = await createInvitation(deps, {
+        email: 'relapse@test.local',
+        invitedBy: adminId,
+      })
+      expect(fresh.status).toBe('pending')
+
+      const rows = await pg.db
+        .select()
+        .from(invitations)
+        .where(eq(invitations.email, 'relapse@test.local'))
+      expect(rows.filter((r) => r.status === 'pending')).toHaveLength(1)
+      expect(rows.filter((r) => r.status === 'expired')).toHaveLength(1)
+
+      // A second live invite for the same email is a domain conflict, not a 500.
+      await expect(
+        createInvitation(deps, { email: 'relapse@test.local', invitedBy: adminId }),
+      ).rejects.toMatchObject({ code: 'INVITATION_CONFLICT' })
+    })
+
     it('revoke = ban + session invalidation, audited as access_revoked (FR-015/SC-007)', async () => {
       const memberId = await createTestUser(pg.db, {
         id: `member-${randomUUID()}`,

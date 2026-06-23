@@ -78,7 +78,7 @@ export function AcceptInviteForm() {
 
   if (phase === 'loading') {
     return (
-      <Card className="w-full max-w-sm">
+      <Card className="w-full max-w-sm" role="status" aria-live="polite">
         <CardHeader>
           <CardTitle>Convite</CardTitle>
           <CardDescription>Verificando seu convite…</CardDescription>
@@ -89,7 +89,7 @@ export function AcceptInviteForm() {
 
   if (phase === 'invalid') {
     return (
-      <Card className="w-full max-w-sm">
+      <Card className="w-full max-w-sm" role="alert">
         <CardHeader>
           <CardTitle>Convite inválido</CardTitle>
           <CardDescription>Este convite não é válido, expirou ou já foi utilizado.</CardDescription>

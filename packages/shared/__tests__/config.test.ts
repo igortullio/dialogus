@@ -48,6 +48,62 @@ describe('envSchema', () => {
     expect(parsed.NEXT_PUBLIC_MASTRA_URL).toBe('http://localhost:4111')
   })
 
+  it('applies defaults for the auth/email vars (feature 001)', () => {
+    const parsed = envSchema.parse({
+      DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus',
+    })
+    expect(parsed.APP_URL).toBe('http://localhost:3000')
+    expect(parsed.SESSION_MAX_AGE_SECONDS).toBe(604_800)
+    expect(parsed.AUTH_RATE_LIMIT_SIGNIN_MAX).toBe(5)
+    expect(parsed.INGESTION_USER_CONCURRENCY_LIMIT).toBe(2)
+    // Secrets + optional knobs are undefined until set (guarded at point of use).
+    expect(parsed.BETTER_AUTH_SECRET).toBeUndefined()
+    expect(parsed.MASTRA_AUTH_SECRET).toBeUndefined()
+    expect(parsed.AUTH_TRUSTED_ORIGINS).toBeUndefined()
+    expect(parsed.EMAIL_PROVIDER).toBeUndefined()
+    expect(parsed.RESEND_API_KEY).toBeUndefined()
+  })
+
+  it('coerces numeric auth knobs and rejects non-positive values', () => {
+    const parsed = envSchema.parse({
+      DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus',
+      SESSION_MAX_AGE_SECONDS: '3600',
+      AUTH_RATE_LIMIT_SIGNIN_MAX: '10',
+    })
+    expect(parsed.SESSION_MAX_AGE_SECONDS).toBe(3600)
+    expect(parsed.AUTH_RATE_LIMIT_SIGNIN_MAX).toBe(10)
+
+    expect(() =>
+      envSchema.parse({
+        DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus',
+        AUTH_RATE_LIMIT_SIGNIN_MAX: '0',
+      }),
+    ).toThrow()
+  })
+
+  it('validates EMAIL_PROVIDER enum and APP_URL format', () => {
+    expect(
+      envSchema.parse({
+        DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus',
+        EMAIL_PROVIDER: 'resend',
+      }).EMAIL_PROVIDER,
+    ).toBe('resend')
+
+    expect(() =>
+      envSchema.parse({
+        DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus',
+        EMAIL_PROVIDER: 'sendgrid',
+      }),
+    ).toThrow()
+
+    expect(() =>
+      envSchema.parse({
+        DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus',
+        APP_URL: 'not-a-url',
+      }),
+    ).toThrow()
+  })
+
   it('accepts MASTRA_PORT=4111 explicitly', () => {
     const parsed = envSchema.parse({
       DATABASE_URL: 'postgres://user:pass@localhost:5432/dialogus',

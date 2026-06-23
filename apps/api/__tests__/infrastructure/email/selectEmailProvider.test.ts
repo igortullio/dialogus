@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { MockEmailProvider } from './MockEmailProvider'
-import { ResendEmailProvider } from './ResendEmailProvider'
-import { EmailProviderConfigError, selectEmailProvider } from './selectEmailProvider'
+import { MockEmailProvider } from '../../../src/infrastructure/email/MockEmailProvider'
+import { ResendEmailProvider } from '../../../src/infrastructure/email/ResendEmailProvider'
+import {
+  EmailProviderConfigError,
+  selectEmailProvider,
+} from '../../../src/infrastructure/email/selectEmailProvider'
 
 describe('selectEmailProvider', () => {
   it('defaults to mock in development', () => {

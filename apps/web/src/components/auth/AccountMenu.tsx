@@ -1,5 +1,6 @@
 'use client'
 
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,7 @@ import { authClient } from '@/lib/auth-client'
  */
 export function AccountMenu() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { data: session } = authClient.useSession()
   const [pending, setPending] = useState(false)
 
@@ -20,6 +22,9 @@ export function AccountMenu() {
   async function handleSignOut() {
     setPending(true)
     await authClient.signOut()
+    // Drop any cached per-user data (threads, metadata) so the next user on
+    // this browser never sees the previous user's conversations (FR-006).
+    queryClient.clear()
     router.replace('/sign-in')
   }
 

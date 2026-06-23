@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { mastraBaseUrl } from '@/lib/api/_envelope'
+import { getServerSession } from '@/lib/auth-session'
 
 const PREFIX_RE = /^\[Available books:[^\]]*\]\n?/
 
@@ -123,6 +124,12 @@ function pipeMastraStream(source: ReadableStream<Uint8Array>): ReadableStream<Ui
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
+  // Conversations are private: only an authenticated user may stream, and the
+  // thread owner (memory.resource) is bound to the session user server-side —
+  // never trusted from the client body (FR-006, SC-002).
+  const session = await getServerSession()
+  if (!session) return new Response('unauthorized', { status: 401 })
+
   let body: Record<string, unknown>
   try {
     body = (await req.json()) as Record<string, unknown>
@@ -131,6 +138,8 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const mastraBody = buildMastraBody(body)
+  const memory = (mastraBody.memory as Record<string, unknown> | undefined) ?? {}
+  mastraBody.memory = { ...memory, resource: session.user.id }
 
   const mastraStream = `${mastraBaseUrl()}/api/agents/dialogusAgent/stream`
 

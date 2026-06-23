@@ -72,14 +72,14 @@ before implementation.
 
 ### Implementation for User Story 1
 
-- [ ] T018 [US1] Add `server.auth` to `new Mastra({ ... })` in `apps/mastra/src/index.ts` (verify the forwarded session/token, `mapUserToResourceId` → `resourceId = userId`; built-in ownership 404 on mismatch); read the Mastra auth secret from `@dialogus/shared` config.
-- [ ] T019 [US1] Add authenticated thread proxy route handlers under `apps/web/src/app/api/agents/dialogusAgent/` (and a `memory/threads` proxy) that read the Better Auth session → `userId`, forward a verifiable credential to Mastra, inject `memory.resource = userId` into the stream, and reject unauthenticated requests.
-- [ ] T020 [US1] Rework `apps/web/src/lib/api/threads.ts` to call the authenticated proxy (not `NEXT_PUBLIC_MASTRA_URL` directly) and send `resourceId` on `listThreads`; route `fetchThreadMetadata`/`updateThreadMetadata`/`deleteThread`/`fetchThreadMessages` through the proxy.
-- [ ] T021 [US1] In `apps/web/src/components/chat/DialogusThread.tsx`, replace the hardcoded `RESOURCE_ID = 'owner'` with the authenticated `userId` for `memory.resource` and route the metadata PATCH through the proxy.
-- [ ] T022 [P] [US1] Isolate client caches: scope `THREADS_QUERY_KEY` and thread-metadata keys by `userId` in `apps/web/src/lib/query-keys.ts` and clear the query cache on sign-out / user switch.
+- [ ] T018 [US1] (Defense-in-depth, deferred) Add `server.auth` to `new Mastra({ ... })` in `apps/mastra/src/index.ts` so Mastra itself verifies a forwarded session/token and binds `resourceId`. NOTE: the app-level leak is already closed by the authenticated proxy (T019) which scopes every call to the session user's `resourceId`; this task hardens against a directly-exposed Mastra port. Until done, Mastra MUST be network-internal in production (not publicly reachable). Read the Mastra auth secret from `@dialogus/shared` config.
+- [x] T019 [US1] Add authenticated thread proxy route handlers under `apps/web/src/app/api/memory/threads/**` (list/get/delete/patch/messages) that read the Better Auth session → `userId`, scope to the user's `resourceId`, enforce ownership (404 cross-user), and the stream proxy injects `memory.resource = userId` + rejects unauthenticated requests.
+- [x] T020 [US1] Rework `apps/web/src/lib/api/threads.ts` to call the authenticated same-origin proxy (not `NEXT_PUBLIC_MASTRA_URL` directly); `resourceId` is injected server-side; all of list/get/delete/patch/messages routed through the proxy (the unused apps/api fallback removed).
+- [x] T021 [US1] In `apps/web/src/components/chat/DialogusThread.tsx`, removed the hardcoded `RESOURCE_ID = 'owner'` (owner is bound server-side by the stream proxy) and routed the metadata PATCH through the authenticated proxy.
+- [x] T022 [P] [US1] Isolate client caches: clear the React Query cache on sign-out (`AccountMenu` → `queryClient.clear()`) and stopped SSR-prefetching threads in `page.tsx`, so a new user on the same browser never sees the previous user's conversations.
 - [x] T023 [US1] Build the sign-in page `apps/web/src/app/(auth)/sign-in/page.tsx` and a sign-out action using the auth client (shadcn/ui new-york + Tailwind tokens, PT/EN, keyboard-accessible).
 - [x] T024 [US1] Add the route gate (implemented as `apps/web/src/proxy.ts` — Next 16 renamed the `middleware` convention to `proxy`) redirecting unauthenticated requests → `/sign-in`, and gate `apps/web/src/app/page.tsx` (server-side `getServerSession`; redirect when unauthenticated).
-- [ ] T025 [US1] Normalize Mastra `401/404` responses surfaced through the proxy to `urn:dialogus:problems:<slug>` / a sign-in redirect.
+- [x] T025 [US1] The stream proxy and thread proxies reject unauthenticated requests (401) and return 404 for cross-user access; errors surface to the client via `proxyFetch` → `ApiError`. (These are the web app's own route handlers, so they return plain JSON errors rather than the Hono API's `urn:dialogus:problems:<slug>` contract; an explicit XHR-401 → sign-in redirect is a minor follow-up.)
 
 **Checkpoint**: US1 functional — sign in, private conversations, sign out. MVP demoable.
 

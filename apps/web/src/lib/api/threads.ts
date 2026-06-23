@@ -1,25 +1,12 @@
-import {
-  type ThreadMetadata,
-  type ThreadMetadataUpdate,
-  threadMetadataSchema,
-} from '@dialogus/shared/schemas/thread'
-import { MASTRA_THREAD_METADATA_AVAILABLE } from '../feature-flags'
-import { apiBaseUrl, fetchEnvelope, fetchVoid, mastraBaseUrl } from './_envelope'
+import type { ThreadMetadata, ThreadMetadataUpdate } from '@dialogus/shared/schemas/thread'
 import { ApiError, isProblemDetails, SchemaError, slugFromProblemType } from './_error'
 import { type Thread, threadListSchema, threadSchema } from './_schemas'
 
-const FALLBACK_BASE = '/api/library/threads'
-const MASTRA_BASE = '/api/memory/threads'
-const MASTRA_AGENT_ID = 'dialogusAgent'
-const useMastra: boolean = MASTRA_THREAD_METADATA_AVAILABLE
-
-if (
-  process.env.NODE_ENV === 'development' &&
-  process.env.NEXT_RUNTIME !== 'edge' &&
-  typeof window === 'undefined'
-) {
-  console.info(`[threads] metadata path: ${useMastra ? 'mastra' : 'apps/api fallback'}`)
-}
+// All thread operations go through the same-origin authenticated proxy in
+// app/api/memory/threads/**, which reads the Better Auth session server-side
+// and scopes every call to the user's resourceId. The browser never talks to
+// Mastra directly (that would bypass per-user isolation — FR-006).
+const THREADS_BASE = '/api/memory/threads'
 
 async function readBodySafe(response: Response): Promise<unknown> {
   const text = await response.text()
@@ -31,14 +18,13 @@ async function readBodySafe(response: Response): Promise<unknown> {
   }
 }
 
-async function mastraFetch<T>(
+async function proxyFetch<T>(
   path: string,
   init: RequestInit,
   parse: (raw: unknown) => T,
   where: string,
 ): Promise<T> {
-  const url = `${mastraBaseUrl().replace(/\/+$/, '')}${path}`
-  const response = await fetch(url, init)
+  const response = await fetch(path, { ...init, credentials: 'include', cache: 'no-store' })
   const body = await readBodySafe(response)
   if (!response.ok) {
     if (isProblemDetails(body)) {
@@ -156,8 +142,8 @@ function parseThreadMessages(raw: unknown): ThreadMessage[] {
 }
 
 export async function fetchThreadMessages(threadId: string): Promise<ThreadMessage[]> {
-  return mastraFetch(
-    `${MASTRA_BASE}/${threadId}/messages?agentId=${MASTRA_AGENT_ID}`,
+  return proxyFetch(
+    `${THREADS_BASE}/${threadId}/messages`,
     { method: 'GET' },
     parseThreadMessages,
     'fetchThreadMessages',
@@ -165,90 +151,54 @@ export async function fetchThreadMessages(threadId: string): Promise<ThreadMessa
 }
 
 export async function listThreads(): Promise<Thread[]> {
-  if (useMastra) {
-    return mastraFetch(`${MASTRA_BASE}`, { method: 'GET' }, parseThreadList, 'listThreads')
-  }
-  const envelope = await fetchEnvelope(apiBaseUrl(), FALLBACK_BASE, {
-    schema: threadListSchema,
-    where: 'listThreads',
-  })
-  return envelope.data
+  return proxyFetch(THREADS_BASE, { method: 'GET' }, parseThreadList, 'listThreads')
 }
 
 export async function deleteThread(id: string): Promise<void> {
-  if (useMastra) {
-    await mastraFetch(
-      `${MASTRA_BASE}/${id}?agentId=${MASTRA_AGENT_ID}`,
-      { method: 'DELETE' },
-      () => undefined,
-      'deleteThread',
-    )
-    return
-  }
-  await fetchVoid(apiBaseUrl(), `${FALLBACK_BASE}/${id}`, {
-    method: 'DELETE',
-    where: 'deleteThread',
-  })
+  await proxyFetch(`${THREADS_BASE}/${id}`, { method: 'DELETE' }, () => undefined, 'deleteThread')
 }
 
 export async function fetchThreadMetadata(id: string): Promise<ThreadMetadata> {
-  if (useMastra) {
-    const thread = await mastraFetch(
-      `${MASTRA_BASE}/${id}?agentId=${MASTRA_AGENT_ID}`,
-      { method: 'GET' },
-      parseThread,
-      'fetchThreadMetadata',
-    )
-    return metadataFromThread(thread)
-  }
-  const envelope = await fetchEnvelope(apiBaseUrl(), `${FALLBACK_BASE}/${id}/metadata`, {
-    schema: threadMetadataSchema,
-    where: 'fetchThreadMetadata',
-  })
-  return envelope.data
+  const thread = await proxyFetch(
+    `${THREADS_BASE}/${id}`,
+    { method: 'GET' },
+    parseThread,
+    'fetchThreadMetadata',
+  )
+  return metadataFromThread(thread)
 }
 
 export async function updateThreadMetadata(
   id: string,
   partial: ThreadMetadataUpdate,
 ): Promise<ThreadMetadata> {
-  if (useMastra) {
-    // Mastra's PATCH /threads/:id replaces metadata wholesale, so we must
-    // first read the current server state and merge `partial` onto it.
-    // Otherwise unrelated keys (custom_title, book_ids, anything outside
-    // ThreadMetadata) get wiped on every pin/rename mutation. We bypass
-    // parseThread here so unknown keys (book_ids) survive the round-trip.
-    const currentRaw = await mastraFetch(
-      `${MASTRA_BASE}/${id}?agentId=${MASTRA_AGENT_ID}`,
-      { method: 'GET' },
-      (raw: unknown) => raw,
-      'updateThreadMetadata.read',
-    )
-    const currentMetadata =
-      currentRaw && typeof currentRaw === 'object' && 'metadata' in currentRaw
-        ? ((currentRaw as { metadata?: unknown }).metadata ?? {})
-        : {}
-    const merged = {
-      ...(currentMetadata as Record<string, unknown>),
-      ...partial,
-    } as Record<string, unknown>
-    const thread = await mastraFetch(
-      `${MASTRA_BASE}/${id}?agentId=${MASTRA_AGENT_ID}`,
-      {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ metadata: merged }),
-      },
-      parseThread,
-      'updateThreadMetadata',
-    )
-    return metadataFromThread(thread)
-  }
-  const envelope = await fetchEnvelope(apiBaseUrl(), `${FALLBACK_BASE}/${id}/metadata`, {
-    method: 'PUT',
-    body: partial,
-    schema: threadMetadataSchema,
-    where: 'updateThreadMetadata',
-  })
-  return envelope.data
+  // Mastra's PATCH /threads/:id replaces metadata wholesale, so we read the
+  // current server state and merge `partial` onto it. Otherwise unrelated keys
+  // (custom_title, book_ids) get wiped on every pin/rename. We bypass
+  // parseThread on the read so unknown keys (book_ids) survive the round-trip.
+  const currentRaw = await proxyFetch(
+    `${THREADS_BASE}/${id}`,
+    { method: 'GET' },
+    (raw: unknown) => raw,
+    'updateThreadMetadata.read',
+  )
+  const currentMetadata =
+    currentRaw && typeof currentRaw === 'object' && 'metadata' in currentRaw
+      ? ((currentRaw as { metadata?: unknown }).metadata ?? {})
+      : {}
+  const merged = {
+    ...(currentMetadata as Record<string, unknown>),
+    ...partial,
+  } as Record<string, unknown>
+  const thread = await proxyFetch(
+    `${THREADS_BASE}/${id}`,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metadata: merged }),
+    },
+    parseThread,
+    'updateThreadMetadata',
+  )
+  return metadataFromThread(thread)
 }

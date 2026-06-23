@@ -6,7 +6,6 @@ import { AssistantChatTransport, useChatRuntime } from '@assistant-ui/react-ai-s
 import { useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { mastraBaseUrl } from '@/lib/api/_envelope'
 import { THREADS_QUERY_KEY } from '@/lib/query-keys'
 import { readAllSpoilerCaps } from '@/lib/spoiler-cap'
 import { cn } from '@/lib/utils'
@@ -18,7 +17,6 @@ import {
 } from './DialogusContext'
 
 const STREAM_PATH = '/api/agents/dialogusAgent/stream'
-const RESOURCE_ID = 'owner'
 
 function newThreadId(): string {
   return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -32,11 +30,13 @@ async function writeThreadMetadata(threadId: string, bookIds: readonly string[])
   // call creates the thread implicitly (via `memory.thread = effectiveThreadId`)
   // and we PATCH metadata afterwards. PATCH is safe because by the time
   // onFinish fires the implicit create has committed.
-  const url = `${mastraBaseUrl().replace(/\/+$/, '')}/api/memory/threads/${threadId}?agentId=dialogusAgent`
+  // Goes through the authenticated same-origin proxy (ownership enforced there),
+  // not Mastra directly.
   try {
-    await fetch(url, {
+    await fetch(`/api/memory/threads/${threadId}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         metadata: { book_ids: bookIds, pinned: false, custom_title: null },
       }),
@@ -163,8 +163,9 @@ export function DialogusThread({
             // /api/agents/:id/stream — they're only honored by the legacy
             // endpoint. The current endpoint binds memory via `memory`, and
             // without this binding messages are never persisted and
-            // `generateTitle` never fires.
-            memory: { thread: effectiveThreadId, resource: RESOURCE_ID },
+            // `generateTitle` never fires. `resource` is injected server-side
+            // by the stream proxy from the session (never trusted from here).
+            memory: { thread: effectiveThreadId },
             requestContext: { book_ids: currentBookIds, spoiler_caps },
             // Legacy snake_case mirrors kept for the route's prefix builder.
             book_ids: currentBookIds,

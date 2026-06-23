@@ -82,16 +82,12 @@ describe('apps/web landing Page (Server Component shell)', () => {
     expect(mockedListThreads).not.toHaveBeenCalled()
   })
 
-  it('renders without throwing and prefetches the threads query', async () => {
+  it('renders without throwing; threads load client-side, not via SSR prefetch', async () => {
     const tree = await Page()
     expect(tree).toBeTruthy()
-    expect(mockedListThreads).toHaveBeenCalledTimes(1)
-  })
-
-  it('still renders when the prefetch rejects (TanStack swallows errors)', async () => {
-    mockedListThreads.mockRejectedValueOnce(new Error('boom'))
-    const tree = await Page()
-    expect(tree).toBeTruthy()
+    // Threads are fetched client-side through the authenticated proxy (scoped
+    // to the user), so the server component must not prefetch them.
+    expect(mockedListThreads).not.toHaveBeenCalled()
   })
 
   it('wraps DialogusLanding in HydrationBoundary', async () => {

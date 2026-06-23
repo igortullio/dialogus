@@ -10,17 +10,21 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { type Logger, pino, stdSerializers } from 'pino'
 import { createAuth } from './infrastructure/auth/auth'
+import { createMemberAccount } from './infrastructure/auth/createAccount'
 import { selectEmailProvider } from './infrastructure/email'
 import {
   createProblemMiddleware,
   type ProblemVariables,
 } from './infrastructure/http/middleware/problem'
 import { type RequestIdVariables, requestId } from './infrastructure/http/middleware/request-id'
+import { createAdminRoute } from './infrastructure/http/routes/admin'
 import { createAuthRoute } from './infrastructure/http/routes/auth'
 import { createCatalogRoute } from './infrastructure/http/routes/catalog'
 import { createHealthRoute } from './infrastructure/http/routes/health'
+import { createInvitationsRoute } from './infrastructure/http/routes/invitations'
 import { createLibraryRoute } from './infrastructure/http/routes/library'
 import { createPreferencesRoute } from './infrastructure/http/routes/preferences'
+import { DrizzleAdminRepository } from './infrastructure/persistence/DrizzleAdminRepository'
 
 const SHUTDOWN_TIMEOUT_MS = 10_000
 
@@ -176,7 +180,8 @@ export async function main(): Promise<void> {
     })
     logger.info({ choice: email.choice, source: email.source }, 'email_provider_selected')
 
-    const auth = createAuth({ db, config, emailProvider: email.provider, logger })
+    const adminRepo = new DrizzleAdminRepository(db)
+    const auth = createAuth({ db, config, emailProvider: email.provider, logger, adminRepo })
     const authApp = createAuthRoute(auth)
 
     const repository = new DrizzleBookRepository(db)
@@ -199,6 +204,16 @@ export async function main(): Promise<void> {
       restoreBook: (userId, id) => restoreBook({ repository, libraryRepo }, userId, id),
     })
     const preferencesApp = createPreferencesRoute({ db, auth, libraryRepo })
+    const adminApp = createAdminRoute({
+      auth,
+      repo: adminRepo,
+      email: email.provider,
+      appUrl: config.APP_URL,
+    })
+    const invitationsApp = createInvitationsRoute({
+      repo: adminRepo,
+      createAccount: (input) => createMemberAccount(auth, input),
+    })
 
     const boot = await start({
       db,
@@ -208,6 +223,8 @@ export async function main(): Promise<void> {
         { prefix: '/api/catalog', app: catalogApp },
         { prefix: '/api/library', app: libraryApp },
         { prefix: '/api/preferences', app: preferencesApp },
+        { prefix: '/api/admin', app: adminApp },
+        { prefix: '/api/invitations', app: invitationsApp },
       ],
     })
     attachSignalHandlers(boot)

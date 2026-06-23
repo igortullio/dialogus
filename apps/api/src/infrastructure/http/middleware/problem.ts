@@ -114,6 +114,28 @@ function mapAuthError(err: Error, path: string): MappedError | null {
   return null
 }
 
+// US3 admin/onboarding error codes (typed DialogusError) → problem slugs.
+const ADMIN_ERROR_CODE_TO_SLUG: Readonly<Record<string, { slug: string; status: number }>> = {
+  LAST_ADMIN: { slug: 'last-admin', status: 409 },
+  INVITATION_INVALID: { slug: 'invitation-invalid', status: 410 },
+  INVITATION_CONFLICT: { slug: 'invitation-conflict', status: 409 },
+  MEMBER_NOT_FOUND: { slug: 'member-not-found', status: 404 },
+}
+
+function mapAdminError(err: DialogusError, path: string): MappedError | null {
+  const mapping = ADMIN_ERROR_CODE_TO_SLUG[err.code]
+  if (mapping === undefined) return null
+  return {
+    body: { ...problemDetails(mapping.slug, mapping.status, err.message), instance: path },
+    status: mapping.status,
+  }
+}
+
+/** Maps typed `DialogusError` codes (admin + ingestion families) to problem slugs. */
+function mapDialogusError(err: DialogusError, path: string): MappedError | null {
+  return mapAdminError(err, path) ?? mapIngestionDialogusError(err, path)
+}
+
 function mapError(err: Error, path: string): MappedError {
   if (err instanceof DuplicateBookError) {
     const body: ProblemBody = {
@@ -193,8 +215,8 @@ function mapError(err: Error, path: string): MappedError {
   }
 
   if (err instanceof DialogusError) {
-    const ingestionMapped = mapIngestionDialogusError(err, path)
-    if (ingestionMapped !== null) return ingestionMapped
+    const mapped = mapDialogusError(err, path)
+    if (mapped !== null) return mapped
   }
 
   return {

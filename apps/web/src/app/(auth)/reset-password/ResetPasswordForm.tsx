@@ -106,9 +106,16 @@ export function ResetPasswordForm() {
               />
             </div>
             {error ? (
-              <p className="text-sm text-destructive" role="alert">
-                {error}
-              </p>
+              <div role="alert" className="flex flex-col gap-1">
+                <p className="text-sm text-destructive">{error}</p>
+                <button
+                  type="button"
+                  className="self-start text-sm text-muted-foreground underline-offset-4 hover:underline"
+                  onClick={() => router.replace('/reset-password')}
+                >
+                  Solicitar novo link
+                </button>
+              </div>
             ) : null}
             <Button type="submit" disabled={pending}>
               {pending ? 'Redefinindo…' : 'Redefinir senha'}

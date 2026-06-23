@@ -13,8 +13,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
  * Next 16 renamed the `middleware` convention to `proxy`.
  */
 export const config = {
+  // Public-page exclusions are anchored with `(?:/|$)` so they match a whole
+  // path segment, not a mere prefix — otherwise a future route like
+  // `/reset-password-stats` would silently skip the gate (FR-001).
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|sign-in|reset-password|accept-invite|api|.*\\.).*)',
+    '/((?!_next/static|_next/image|favicon.ico|sign-in(?:/|$)|reset-password(?:/|$)|accept-invite(?:/|$)|api(?:/|$)|.*\\.).*)',
   ],
 }
 

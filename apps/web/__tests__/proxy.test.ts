@@ -18,6 +18,15 @@ describe('route-gate matcher', () => {
     expect(matches('/sign-in')).toBe(false)
     expect(matches('/reset-password')).toBe(false)
     expect(matches('/accept-invite')).toBe(false)
+    // …and their subpaths, if any are ever added.
+    expect(matches('/reset-password/confirm')).toBe(false)
+  })
+
+  it('still gates a route that merely SHARES a prefix with a public page (anchored exclusion)', () => {
+    expect(matches('/reset-password-stats')).toBe(true)
+    expect(matches('/sign-in-history')).toBe(true)
+    expect(matches('/accept-invitee')).toBe(true)
+    expect(matches('/apikeys')).toBe(true)
   })
 
   it('excludes Next internals, web API routes, and static files', () => {

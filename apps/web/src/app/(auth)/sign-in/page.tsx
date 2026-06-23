@@ -12,6 +12,7 @@ function SignInForm() {
   const router = useRouter()
   const params = useSearchParams()
   const redirectTo = params.get('redirect') || '/'
+  const resetDone = params.get('reset') === 'success'
   const { data: session } = authClient.useSession()
   const emailId = useId()
   const passwordId = useId()
@@ -46,6 +47,11 @@ function SignInForm() {
         <CardDescription>Acesse seu espaço de leitura e conversas.</CardDescription>
       </CardHeader>
       <CardContent>
+        {resetDone ? (
+          <p className="mb-4 text-sm text-muted-foreground" role="status">
+            Senha redefinida. Faça login com sua nova senha.
+          </p>
+        ) : null}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           <div className="flex flex-col gap-2">
             <label htmlFor={emailId} className="text-sm font-medium">

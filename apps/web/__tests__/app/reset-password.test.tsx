@@ -87,7 +87,7 @@ describe('ResetPasswordForm — confirm mode (token present)', () => {
     expect(resetPassword).not.toHaveBeenCalled()
   })
 
-  it('shows an error when the reset call fails', async () => {
+  it('shows an error with a recovery link when the reset call fails', async () => {
     resetPassword.mockResolvedValue({ data: null, error: { message: 'invalid' } } as never)
 
     render(<ResetPasswordForm />)
@@ -98,7 +98,13 @@ describe('ResetPasswordForm — confirm mode (token present)', () => {
     fireEvent.click(screen.getByRole('button', { name: /redefinir/i }))
 
     expect(await screen.findByRole('alert')).toBeTruthy()
+    // A submit-time token rejection still offers a way to request a fresh link.
+    const recover = await screen.findByRole('button', { name: /solicitar novo link/i })
+    expect(recover).toBeTruthy()
     expect(replace).not.toHaveBeenCalled()
+
+    fireEvent.click(recover)
+    expect(replace).toHaveBeenCalledWith('/reset-password')
   })
 })
 

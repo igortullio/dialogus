@@ -71,6 +71,13 @@
       "when": 1782217134964,
       "tag": "0009_library_and_preferences",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782239322941,
+      "tag": "0010_invitations_and_security_events",
+      "breakpoints": true
     }
   ]
 }

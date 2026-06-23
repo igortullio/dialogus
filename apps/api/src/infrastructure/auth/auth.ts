@@ -1,11 +1,14 @@
 import type { Database } from '@dialogus/db'
 import { account, rateLimit, session, user, verification } from '@dialogus/db/schema'
 import type { DialogusEnv } from '@dialogus/shared/config'
-import { betterAuth } from 'better-auth'
+import { type BetterAuthOptions, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { admin } from 'better-auth/plugins'
 import type { Logger } from 'pino'
+import type { AdminRepository } from '../../application/admin/ports'
 import type { EmailProvider } from '../email'
+import { DrizzleAdminRepository } from '../persistence/DrizzleAdminRepository'
+import { createAllowlistHooks } from './hooks'
 
 export class AuthConfigError extends Error {
   constructor(message: string) {
@@ -19,6 +22,12 @@ export interface CreateAuthDeps {
   readonly config: DialogusEnv
   readonly emailProvider: EmailProvider
   readonly logger?: Pick<Logger, 'info' | 'warn'>
+  /**
+   * Persistence for the invite-only allowlist + audit hooks. Defaults to a
+   * `DrizzleAdminRepository` over `db`; injectable so tests can observe the
+   * recorded `security_events` / consumed invitations.
+   */
+  readonly adminRepo?: AdminRepository
 }
 
 const DEV_SECRET = 'dev-insecure-better-auth-secret-change-me'
@@ -53,6 +62,7 @@ function resolveTrustedOrigins(config: DialogusEnv): string[] {
 export function createAuth(deps: CreateAuthDeps) {
   const { db, config, emailProvider, logger } = deps
   const secret = resolveSecret(config)
+  const adminRepo = deps.adminRepo ?? new DrizzleAdminRepository(db)
 
   return betterAuth({
     secret,
@@ -64,9 +74,11 @@ export function createAuth(deps: CreateAuthDeps) {
     }),
     emailAndPassword: {
       enabled: true,
-      // Invite-only: public sign-up is blocked; accounts are created by the
-      // owner seed / admin API, and (in the onboarding story) by an allowlist
-      // `user.create.before` hook.
+      // Invite-only: the public `/sign-up/email` endpoint is disabled entirely.
+      // Accounts are created server-side (owner seed + the accept-invite flow)
+      // via `internalAdapter.createUser`, which still runs the `databaseHooks`
+      // below — so the `user.create.before` allowlist hook gates every account
+      // (FR-014/FR-016) and audits unauthorized attempts (FR-005).
       disableSignUp: true,
       sendResetPassword: async ({ user: target, url }) => {
         await emailProvider.send({
@@ -97,6 +109,10 @@ export function createAuth(deps: CreateAuthDeps) {
       },
     },
     plugins: [admin({ defaultRole: 'member', adminRoles: ['admin'] })],
+    // Invite-only allowlist gate + audit (US3). `internalAdapter.createUser`
+    // (owner seed + accept-invite) runs these even though `/sign-up/email` is
+    // disabled. See `infrastructure/auth/hooks.ts`.
+    databaseHooks: createAllowlistHooks({ repo: adminRepo }) as BetterAuthOptions['databaseHooks'],
     onAPIError: {
       onError: (error) => {
         logger?.warn({ error }, 'better_auth_api_error')

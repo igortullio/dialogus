@@ -43,64 +43,54 @@ pnpm dev
 
 A test owner `owner@dialogus.test` / `OwnerPass123!` already exists in the dev DB.
 
-## US2 remaining — the app→API→web cascade (do it as ONE coherent change)
+## Next up — US3: invite-only onboarding + access control (T040–T048)
 
-This is why it wasn't finished in one pass: it touches the `@dialogus/catalog`
-app fns + the `/api/library` route + `main()` + **~8 API test files** (unit +
-Testcontainers integration that boot the app and make real HTTP calls). It must
-land together with its tests.
+Owner-controlled onboarding: only allowlisted emails can create accounts; the
+owner can invite/list/revoke; unauthorized attempts are rejected **and audited**;
+revoking invalidates sessions; the last admin can't be removed/demoted.
+Single source of truth: `tasks.md` Phase 5 (T040–T048) + `contracts/admin-invitations.md`.
 
-### Step 1 — catalog app fns (T032), already designed & validated once
-Change signatures to user-scoped + membership (the `LibraryEntryRepository` is
-already committed). Target shapes:
+### Already in place to build on (don't rebuild)
+- **Admin plugin** is on the Better Auth instance: `admin({ defaultRole: 'member', adminRoles: ['admin'] })` (`apps/api/src/infrastructure/auth/auth.ts:99`). `disableSignUp: true` is set — the `user.create.before` hook is the allowlist gate.
+- **`requireAdmin()`** middleware already exists (`apps/api/src/infrastructure/http/middleware/auth.ts`) — 401 if no `userId`, 403 if `userRole !== 'admin'`. Apply it to the admin route group exactly like `requireAuth()` is applied in `routes/library.ts`/`preferences.ts`.
+- **Email port** `sendEmail()` + `selectEmailProvider` (mock/Resend) landed in Foundational (`apps/api/src/infrastructure/email/`) — T047 sends the invite link through it; mock mode logs the link (scrape it in tests).
+- **Owner seed** server-side user creation pattern: `apps/api/src/infrastructure/auth/seed-owner.ts` (`auth.$context` → `internalAdapter.createUser/createAccount`).
+- **Problem middleware**: add `invitation-invalid` (409/410) + `last-admin` (409) slugs in `apps/api/src/infrastructure/http/middleware/problem.ts` (mirror how `unauthorized`/`forbidden`/`ingestion-concurrency-limit` are mapped from typed `DialogusError`s).
 
-- `addBookToLibrary(deps{repository,libraryRepo,client}, userId, gutendexId) → { book, needsIngestion }`
-  — resolve-or-create shared book by gutendex_id (no more `DuplicateBookError`),
-  `libraryRepo.upsertMembership(userId, book.id)`, `needsIngestion = status === 'discovered'`.
-- `listLibrary(deps{libraryRepo}, userId, input) → libraryRepo.listForUser(...)`.
-- `getBook(deps{repository,libraryRepo}, userId, id)` — `isActiveMember` else `BookNotFoundError`.
-- `removeBook(deps{libraryRepo}, userId, id)` — `softRemove`; false → `BookNotFoundError`.
-- `restoreBook(deps{repository,libraryRepo}, userId, id)` — `restore`; false → `BookNotFoundError`.
+### Migration number gotcha
+US2 consolidated into **`0009_library_and_preferences`** (there is no `0010`). The
+data-model text says "0011" but that assumed separate 0009/0010 — **run
+`ls packages/db/drizzle` and use the next free number (likely `0010`)** for
+`invitations` + `security_events`. Author as Drizzle schema then `pnpm db:generate`;
+never run Better Auth's own migrate.
 
-Then rewrite the 5 catalog app-fn tests (mock a `LibraryEntryRepository`; the
-mock helper shape is in the git history of the reverted attempt if useful).
+### Suggested order (tests first, per Constitution II)
+1. **T040 / T041** write the failing integration + E2E tests first (invitation state machine pending→used/revoked/expired, unauthorized-signup → `security_events` row, single-use, revoke-invalidates-sessions, last-admin guard).
+2. **T042** schema: `invitations` + `security_events` (`packages/db/src/schema/`) + migration.
+3. **T043** `databaseHooks.user.create.before` allowlist hook on the auth instance (reject + write `unauthorized_signup_attempt` when the normalized email isn't an open invitation; mark the invitation `used` on success).
+4. **T044** Better Auth event hooks → `security_events` (`account_created`, `sign_in`, `sign_in_failed`, `access_revoked`).
+5. **T045** admin application services (create/list/revoke invitation; list members; revoke/restore/role) **with the last-admin guard**.
+6. **T046** admin routes under `requireAdmin` (cursor pagination + Zod envelopes) + the two new problem slugs.
+7. **T047** send the invite email via the `sendEmail()` port (accept-invite link from `APP_URL`).
+8. **T048** `apps/web/src/app/(auth)/accept-invite/page.tsx` + the admin invitations/members UI.
 
-### Step 2 — API route + `main()` (T033/T034)
-- `apps/api/.../routes/library.ts`: apply `createSessionMiddleware(auth)` +
-  `requireAuth()` (need `auth` in `LibraryRouteDeps`), read `c.get('userId')`,
-  thread it into every deps closure. On `POST /books`, if `needsIngestion`,
-  auto-enqueue ingestion with a **deterministic** `Idempotency-Key: ingest-{bookId}`.
-- Per-user concurrency cap (FR-021): before enqueue, `libraryRepo.countInFlight(userId)`
-  >= `INGESTION_USER_CONCURRENCY_LIMIT` → 429 `ingestion-concurrency-limit` (+ slug in `problem.ts`).
-- Membership authorization on `ingest`/`retry`/`ingestion-status`/`getChunk`
-  (don't leak another user's chunk/status — SC-002).
-- `main()`: build `new DrizzleLibraryEntryRepository(db)`, pass `auth`, make the
-  deps closures `(userId, ...) => appFn({repository, libraryRepo, client}, userId, ...)`.
-
-### Step 3 — the test gotcha (this is the real blocker)
-The ~8 API test files break once `/api/library` requires auth. Decide ONE auth
-pattern for tests first, then apply everywhere:
-- **Unit route tests** (`routes/library.test.ts`, `routes/library-ingestion.test.ts`):
-  inject a fake/stub session middleware (or a test `auth` whose `getSession`
-  returns a fixed user) so handlers get a `userId`.
-- **Integration tests** (`integration/*.integration.test.ts`): add a sign-in
-  helper that seeds an owner via Better Auth and obtains the session cookie, then
-  send it on every request. (Mirror the web `__tests__/helpers/auth.ts` pattern.)
-
-### Step 4 — web + spoiler caps (T035–T038) and FR-022 guard (T039)
-- `preferences` API (GET/PUT spoiler caps) + rewrite `apps/web/src/lib/spoiler-cap.ts`
-  from localStorage to the API; structural cap injection via the stream proxy.
-- `AddGutendexSheet`/`lib/api/library.ts`: drop the gutendex duplicate workaround
-  (add is idempotent now); auto-ingest only when returned status is `discovered`.
-- Assert no code path lists `books` globally (leftover single-user books never
-  surface — FR-022).
-
-### Step 5 — tests T026–T028 (integration + E2E for two-user library isolation).
+### Reusable test infra from US2 (mirror these)
+- `apps/api/__tests__/_helpers/auth.ts` — `fakeAuth(userId, role)` (pass `'admin'` for admin-route unit tests) and `headerAuth({...})` for multi-user; `requireAdmin` reads `userRole`.
+- `apps/api/__tests__/integration/_helpers/setup.ts` — `startPostgres`, `createTestUser(db, { id, role })`, `addLibraryMembership`, `dockerAvailable`.
+- Gate: `pnpm lint && pnpm -r typecheck && pnpm -r test` (unit; the pre-commit hook also runs it). Testcontainers run via `pnpm --filter @dialogus/api test:integration`.
+- **Local OrbStack caveat**: MSW `onUnhandledRequest: 'error'` breaks Testcontainers' Docker-socket detection; run integration with `DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock TESTCONTAINERS_RYUK_DISABLED=true`, and temporarily flip an MSW suite to `'bypass'` to run it locally (CI's native Docker is fine with `'error'`).
 
 ## How to kick off the next session
 
-> "Continue feature 001-multi-user-auth from the HANDOFF.md — do the US2
-> app→API→web cascade (T032–T039). Start by deciding the API test auth pattern
-> (Step 3), then catalog app fns + route + main(), keeping the gate green."
+> "Continue feature 001-multi-user-auth from HANDOFF.md — implement US3
+> (invite-only onboarding + access control, T040–T048). Write the failing
+> invitation/state-machine + last-admin tests first, then schema+migration →
+> allowlist & event hooks → admin services → admin routes → invite email →
+> accept-invite + admin UI. Keep the gate green and commit per logical group."
 
-Then I read `HANDOFF.md` + `tasks.md` + `plan.md` and proceed.
+Then read `HANDOFF.md` + `tasks.md` (Phase 5) + `contracts/admin-invitations.md` + `data-model.md` and proceed.
+
+### Status snapshot (for the resuming session)
+Foundational (T001–T015) ✅ · US1 (T016–T025) ✅ · **US2 (T026–T039) ✅ complete**
+(commits `65c881d` app→API, `b29331f` preferences+FR-022, `bbcec32` web,
+`8491aa0` isolation tests). US3 (T040–T048) ⬜ · US4 (T049–T054) ⬜ · Polish (T055–T062) ⬜.

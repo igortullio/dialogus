@@ -55,3 +55,4 @@ export type {
   GutendexSort,
 } from './domain/book/GutendexClient.port'
 export { INGESTION_STATUS_VALUES, type IngestionStatus } from './domain/book/IngestionStatus'
+export type { LibraryEntryRepository } from './domain/libraryEntry/LibraryEntryRepository.port'

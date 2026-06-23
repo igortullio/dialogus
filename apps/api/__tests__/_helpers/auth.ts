@@ -17,3 +17,22 @@ export function fakeAuth(userId: string, role: 'admin' | 'member' = 'member'): A
     },
   } as unknown as Auth
 }
+
+/**
+ * A stub Better Auth instance that resolves the session from an `x-test-user`
+ * request header, so a single booted app can act as multiple users (one request
+ * per user) — used by the cross-user isolation integration tests. An absent or
+ * unknown header resolves to `null` (exercises the 401 path). Each id must exist
+ * in the `user` table (FK from `library_entries`), so seed via `createTestUser`.
+ */
+export function headerAuth(users: Record<string, { id: string; role?: 'admin' | 'member' }>): Auth {
+  return {
+    api: {
+      getSession: async ({ headers }: { headers: Headers }) => {
+        const id = headers.get('x-test-user')
+        const user = id ? users[id] : undefined
+        return user ? { user: { id: user.id, role: user.role ?? 'member' } } : null
+      },
+    },
+  } as unknown as Auth
+}

@@ -30,9 +30,20 @@ export async function addBookToLibrary(
   userId: string,
   gutendexId: number,
 ): Promise<AddBookToLibraryResult> {
-  const existing = await deps.repository.findByGutendexId(gutendexId)
-  const book =
-    existing ?? (await deps.repository.save(toNewBook(await deps.client.getBook(gutendexId))))
+  let book = await deps.repository.findByGutendexId(gutendexId)
+  if (!book) {
+    const dto = await deps.client.getBook(gutendexId)
+    try {
+      book = await deps.repository.save(toNewBook(dto))
+    } catch (err) {
+      // Concurrent first-add: another request created the shared book between our
+      // findByGutendexId and save (gutendex_id is UNIQUE). Resolve to the winner
+      // so exactly one shared book exists and both users get a membership (FR-012).
+      const refetched = await deps.repository.findByGutendexId(gutendexId)
+      if (!refetched) throw err
+      book = refetched
+    }
+  }
 
   await deps.libraryRepo.upsertMembership(userId, book.id)
 

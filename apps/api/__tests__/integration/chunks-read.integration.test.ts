@@ -45,6 +45,7 @@ describe.skipIf(!dockerAvailable)('GET /api/library/chunks/:id', () => {
   let app: Hono<{ Variables: ProblemVariables }>
   let bookId: string
   let firstChunkId: string
+  let userBId: string
 
   beforeAll(async () => {
     pg = await startPostgres()
@@ -67,6 +68,7 @@ describe.skipIf(!dockerAvailable)('GET /api/library/chunks/:id', () => {
     })
 
     const userId = await createTestUser(pg.db, { id: 'user-chunks-int' })
+    userBId = await createTestUser(pg.db, { id: 'user-chunks-b' })
 
     const logger = pino({ level: 'silent' })
     app = new Hono<{ Variables: ProblemVariables }>()
@@ -139,5 +141,29 @@ describe.skipIf(!dockerAvailable)('GET /api/library/chunks/:id', () => {
     const body = (await response.json()) as Record<string, unknown>
     expect(body.type).toBe('urn:dialogus:problems:chunk-not-found')
     expect(body.status).toBe(404)
+  })
+
+  it('returns 404 book-not-found for a real chunk whose book the user is not a member of (SC-002)', async () => {
+    // user-chunks-b never added this book, so resolving its chunk must look like a
+    // genuine miss — book-not-found, NOT chunk-not-found (don't leak that it exists).
+    const appB = new Hono<{ Variables: ProblemVariables }>()
+    appB.use('*', createProblemMiddleware({ logger: pino({ level: 'silent' }) }))
+    appB.route(
+      '/api/library',
+      createLibraryRoute({
+        db: pg.db,
+        auth: fakeAuth(userBId),
+        libraryRepo: new DrizzleLibraryEntryRepository(pg.db),
+        concurrencyLimit: 100,
+        enqueueDeps: { databaseUrl: pg.databaseUrl },
+      }),
+    )
+
+    const response = await appB.request(
+      new Request(`http://local/api/library/chunks/${firstChunkId}`, { method: 'GET' }),
+    )
+    expect(response.status).toBe(404)
+    const body = (await response.json()) as Record<string, unknown>
+    expect(body.type).toBe('urn:dialogus:problems:book-not-found')
   })
 })

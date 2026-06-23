@@ -93,9 +93,9 @@ before implementation.
 
 ### Tests for User Story 2 (per Constitution Principle II) ⚠️
 
-- [ ] T026 [P] [US2] Integration test: `library_entries` scoping, cross-user `book-not-found`, shared-corpus instant reuse, concurrent-first-add exactly-once (deterministic idempotency key), and per-user concurrency cap (429) in `apps/api/src/application/library/library-isolation.integration.test.ts`.
-- [ ] T027 [P] [US2] Integration test: per-user spoiler-cap SQL clause (no post-cap citations) and `getChunk` membership authorization in `apps/api/src/application/library/spoiler-and-citation.integration.test.ts`.
-- [ ] T028 [P] [US2] E2E (Playwright + axe): two-user library isolation, instant re-add, and spoiler cap persisting across "devices" in `apps/web/__tests__/e2e/library-isolation.spec.ts`.
+- [x] T026 [P] [US2] Integration test (Testcontainers + MSW) in `apps/api/__tests__/integration/library-isolation.integration.test.ts`: `library_entries` scoping, cross-user `book-not-found` (get/ingest/status), shared-corpus instant reuse (no enqueue), concurrent-first-add exactly-once (one shared book + one deterministic `ingest-{bookId}` key — hardened `addBookToLibrary` resolve-or-create to refetch the winner on the `gutendex_id` unique race), and the per-user concurrency cap (429, isolated per user). Multi-user via an `x-test-user` `headerAuth` stub.
+- [x] T027 [P] [US2] Split across the layers where the logic lives: the per-user spoiler-cap SQL clause (no post-cap citations) is covered in `apps/mastra/__tests__/integration/spoiler-cap.integration.test.ts` (added a `find_character_mentions` cap case — the citation path, no embeddings needed); `getChunk` membership authorization (cross-user → `book-not-found`, not `chunk-not-found`) is added to `apps/api/__tests__/integration/chunks-read.integration.test.ts`.
+- [x] T028 [P] [US2] E2E (Playwright + axe) in `apps/web/__tests__/integration/library-isolation.spec.ts` (placed where the existing `integration` Playwright project discovers it — there is no separate `e2e` project): two-user library isolation, instant shared-corpus re-add, account-scoped spoiler cap persisting across "devices" (two browser contexts), and a `/library` axe check. Added `signInAs`/`MEMBER_CREDENTIALS` to the web auth helper. Typecheck-validated (needs the full stack + two seeded users + `E2E_MOCK_LLM=1` to execute, per the T017 precedent).
 
 ### Implementation for User Story 2
 

@@ -91,6 +91,14 @@ never run Better Auth's own migrate.
 Then read `HANDOFF.md` + `tasks.md` (Phase 5) + `contracts/admin-invitations.md` + `data-model.md` and proceed.
 
 ### Status snapshot (for the resuming session)
-Foundational (T001–T015) ✅ · US1 (T016–T025) ✅ · **US2 (T026–T039) ✅ complete**
-(commits `65c881d` app→API, `b29331f` preferences+FR-022, `bbcec32` web,
-`8491aa0` isolation tests). US3 (T040–T048) ⬜ · US4 (T049–T054) ⬜ · Polish (T055–T062) ⬜.
+Foundational (T001–T015) ✅ · US1 (T016–T025) ✅ · **US2 (T026–T039) ✅** · **US3 (T040–T048) ✅ complete**
+(commits `bcf462e` allowlist+services+hooks domain, `c69970f` admin/accept routes + problem slugs,
+`4ec46b8` accept-invite page + admin console). US4 (T049–T054) ⬜ · Polish (T055–T062) ⬜.
+
+#### US3 notes for the next session
+- **Migration is `0010_invitations_and_security_events`** (not `0011` — US2 consolidated into `0009`). data-model §6 still says 0011; it's `0010`.
+- **Invite-only model**: `disableSignUp:true` stays; `/sign-up/email` is fully disabled. Accounts are created **server-side** (owner seed + `POST /api/invitations/accept` → `createMemberAccount` → `internalAdapter.createUser`), which DOES run the `databaseHooks` allowlist gate. The before-hook **exempts `role:'admin'`** so the owner seed isn't blocked. To exercise the `unauthorized_signup_attempt` audit, attempt a member `internalAdapter.createUser` for a non-invited email (see the integration test).
+- **AdminRepository port** (`apps/api/src/application/admin/ports.ts`) backs both the hooks and the admin services → services/hooks are unit-tested vs an in-memory fake (`__tests__/_helpers/fakeAdminRepo.ts`); `DrizzleAdminRepository` is covered by the Testcontainers suite.
+- **Accept token** = the invitation `id` (uuid v4, unguessable); the email link is `${APP_URL}/accept-invite?invitation={id}`. `GET /api/invitations/:id` exposes only the email+status for an *open* invite; non-open → `invitation-invalid` (410).
+- **Follow-ups**: `/api/invitations/accept` is NOT yet rate-limited (Better Auth's rateLimit only covers `/api/auth/*`) — FR-021 polish. `sign_in_failed` audit deferred to US4. `expired` is computed lazily (open = pending AND `expires_at > now()`); no row is flipped to `expired` (a sweeper is optional).
+- Run the US3 integration test: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @dialogus/api test:integration admin-invitations` (no MSW, so the OrbStack socket caveat doesn't apply).

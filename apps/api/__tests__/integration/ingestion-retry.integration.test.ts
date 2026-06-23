@@ -16,12 +16,16 @@ import { HttpResponse, http } from 'msw'
 import { type SetupServer, setupServer } from 'msw/node'
 import { pino } from 'pino'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { DrizzleLibraryEntryRepository } from '../../../../packages/catalog/src/infrastructure/persistence/DrizzleLibraryEntryRepository'
 import {
   createProblemMiddleware,
   type ProblemVariables,
 } from '../../src/infrastructure/http/middleware/problem'
 import { createLibraryRoute } from '../../src/infrastructure/http/routes/library'
+import { fakeAuth } from '../_helpers/auth'
 import {
+  addLibraryMembership,
+  createTestUser,
   dockerAvailable,
   insertDiscoveredBook,
   type PostgresContext,
@@ -64,6 +68,7 @@ describe.skipIf(!dockerAvailable)('ingestion retry — recover from mid-summariz
   let downloadCount: number
   let generator: FailOnceSummaryGenerator
   let httpApp: Hono<{ Variables: ProblemVariables }>
+  let userId: string
 
   beforeAll(async () => {
     pg = await startPostgres()
@@ -95,6 +100,8 @@ describe.skipIf(!dockerAvailable)('ingestion retry — recover from mid-summariz
       chapterSummaryGenerator: generator,
     })
 
+    userId = await createTestUser(pg.db, { id: 'user-retry-int' })
+
     const logger = pino({ level: 'silent' })
     httpApp = new Hono<{ Variables: ProblemVariables }>()
     httpApp.use('*', createProblemMiddleware({ logger }))
@@ -102,6 +109,9 @@ describe.skipIf(!dockerAvailable)('ingestion retry — recover from mid-summariz
       '/api/library',
       createLibraryRoute({
         db: pg.db,
+        auth: fakeAuth(userId),
+        libraryRepo: new DrizzleLibraryEntryRepository(pg.db),
+        concurrencyLimit: 100,
         logger,
         enqueueDeps: { databaseUrl: pg.databaseUrl },
       }),
@@ -124,6 +134,8 @@ describe.skipIf(!dockerAvailable)('ingestion retry — recover from mid-summariz
       languages: ['en'],
       downloadUrlTxt: TXT_URL,
     })
+    // The retry endpoint is membership-gated (SC-002).
+    await addLibraryMembership(pg.db, userId, bookId)
 
     await worker.boot.boss.send('ingestion.download', { bookId })
 

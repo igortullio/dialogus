@@ -1,4 +1,4 @@
-import { BookNotFoundError } from '@dialogus/catalog'
+import { BookNotFoundError, type LibraryEntryRepository } from '@dialogus/catalog'
 import type { Database } from '@dialogus/db'
 import { books } from '@dialogus/db/schema'
 import type {
@@ -13,6 +13,7 @@ import { isIngestionStage } from './ingestionStatus'
 
 export interface RetryIngestBookDeps {
   readonly db: Database
+  readonly libraryRepo: LibraryEntryRepository
   readonly enqueueDeps: EnqueueDeps
   readonly enqueueImpl?: typeof enqueue
 }
@@ -29,8 +30,13 @@ const STAGE_TO_RUNNING_STATUS: Record<IngestionStage, IngestionStatus> = {
 
 export async function retryIngestBook(
   deps: RetryIngestBookDeps,
+  userId: string,
   bookId: string,
 ): Promise<IngestionEnqueueResponseDto> {
+  // Membership-gated retry of a failed shared title (SC-002).
+  const isMember = await deps.libraryRepo.isActiveMember(userId, bookId)
+  if (!isMember) throw new BookNotFoundError(`Book ${bookId} not found`)
+
   const row = await deps.db.query.books.findFirst({
     where: eq(books.id, bookId),
     columns: { id: true, ingestionStatus: true, ingestionLastStage: true },

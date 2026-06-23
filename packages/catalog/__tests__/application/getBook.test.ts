@@ -3,6 +3,9 @@ import { getBook } from '../../src/application/getBook'
 import type { Book } from '../../src/domain/book/Book'
 import { BookNotFoundError } from '../../src/domain/book/BookError'
 import type { BookRepository } from '../../src/domain/book/BookRepository.port'
+import type { LibraryEntryRepository } from '../../src/domain/libraryEntry/LibraryEntryRepository.port'
+
+const USER = 'user-1'
 
 function makeBook(overrides: Partial<Book> = {}): Book {
   const now = new Date('2026-04-01T00:00:00Z')
@@ -38,32 +41,45 @@ function fakeRepository(found: Book | null): BookRepository {
   }
 }
 
+function fakeLibraryRepo(isActiveMember: boolean): LibraryEntryRepository {
+  return {
+    upsertMembership: vi.fn(async () => undefined),
+    isActiveMember: vi.fn(async () => isActiveMember),
+    softRemove: vi.fn(async () => true),
+    restore: vi.fn(async () => true),
+    listForUser: vi.fn(async () => ({ books: [], nextCursor: null, total: 0 })),
+    countInFlight: vi.fn(async () => 0),
+  }
+}
+
 describe('getBook', () => {
-  it('returns the book when found', async () => {
+  it('returns the book when the user is an active member', async () => {
     const book = makeBook({ id: 'uuid-1' })
     const repository = fakeRepository(book)
+    const libraryRepo = fakeLibraryRepo(true)
 
-    const result = await getBook({ repository }, 'uuid-1')
+    const result = await getBook({ repository, libraryRepo }, USER, 'uuid-1')
 
+    expect(libraryRepo.isActiveMember).toHaveBeenCalledWith(USER, 'uuid-1')
     expect(repository.findById).toHaveBeenCalledWith('uuid-1')
     expect(result).toBe(book)
   })
 
-  it('returns a soft-deleted book when found', async () => {
-    const deletedAt = new Date('2026-04-10T00:00:00Z')
-    const book = makeBook({ id: 'uuid-2', deletedAt })
-    const repository = fakeRepository(book)
+  it('throws BookNotFoundError for a non-member (cross-user; no existence leak)', async () => {
+    const repository = fakeRepository(makeBook({ id: 'uuid-2' }))
+    const libraryRepo = fakeLibraryRepo(false)
 
-    const result = await getBook({ repository }, 'uuid-2')
-
-    expect(result.deletedAt).toBe(deletedAt)
+    await expect(getBook({ repository, libraryRepo }, USER, 'uuid-2')).rejects.toBeInstanceOf(
+      BookNotFoundError,
+    )
+    expect(repository.findById).not.toHaveBeenCalled()
   })
 
-  it('throws BookNotFoundError when the repository returns null', async () => {
+  it('throws BookNotFoundError when membership exists but the shared book is missing', async () => {
     const repository = fakeRepository(null)
+    const libraryRepo = fakeLibraryRepo(true)
 
-    await expect(getBook({ repository }, 'missing-uuid')).rejects.toBeInstanceOf(BookNotFoundError)
-    await expect(getBook({ repository }, 'missing-uuid')).rejects.toMatchObject({
+    await expect(getBook({ repository, libraryRepo }, USER, 'missing-uuid')).rejects.toMatchObject({
       code: 'BOOK_NOT_FOUND',
     })
   })

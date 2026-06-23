@@ -112,7 +112,11 @@ export class DrizzleLibraryEntryRepository implements LibraryEntryRepository {
         and(
           eq(libraryEntries.userId, userId),
           isNull(libraryEntries.deletedAt),
-          sql`${books.ingestionStatus} NOT IN ('ready', 'failed')`,
+          // Actively-ingesting only: `discovered` is added-but-not-started (no job
+          // in flight) and `ready`/`failed` are terminal. This is the count the
+          // per-user concurrency cap (FR-021) checks before starting a new ingest,
+          // so the book about to be started (still `discovered`) is not counted.
+          sql`${books.ingestionStatus} NOT IN ('discovered', 'ready', 'failed')`,
         ),
       )
     return rows[0]?.count ?? 0

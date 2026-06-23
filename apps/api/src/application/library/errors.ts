@@ -29,3 +29,14 @@ export class ChunkNotFoundError extends DialogusError {
     super('CHUNK_NOT_FOUND', `Chunk ${chunkId} not found`)
   }
 }
+
+export class IngestionConcurrencyLimitError extends DialogusError {
+  readonly limit: number
+  constructor(limit: number) {
+    super(
+      'INGESTION_CONCURRENCY_LIMIT',
+      `Too many concurrent ingestions in progress (limit ${limit}); try again once one finishes`,
+    )
+    this.limit = limit
+  }
+}

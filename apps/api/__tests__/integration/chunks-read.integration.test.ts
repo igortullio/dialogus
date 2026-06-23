@@ -9,12 +9,16 @@ import { HttpResponse, http } from 'msw'
 import { type SetupServer, setupServer } from 'msw/node'
 import { pino } from 'pino'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { DrizzleLibraryEntryRepository } from '../../../../packages/catalog/src/infrastructure/persistence/DrizzleLibraryEntryRepository'
 import {
   createProblemMiddleware,
   type ProblemVariables,
 } from '../../src/infrastructure/http/middleware/problem'
 import { createLibraryRoute } from '../../src/infrastructure/http/routes/library'
+import { fakeAuth } from '../_helpers/auth'
 import {
+  addLibraryMembership,
+  createTestUser,
   dockerAvailable,
   insertDiscoveredBook,
   type PostgresContext,
@@ -62,6 +66,8 @@ describe.skipIf(!dockerAvailable)('GET /api/library/chunks/:id', () => {
       logger: pino({ level: 'silent' }),
     })
 
+    const userId = await createTestUser(pg.db, { id: 'user-chunks-int' })
+
     const logger = pino({ level: 'silent' })
     app = new Hono<{ Variables: ProblemVariables }>()
     app.use('*', createProblemMiddleware({ logger }))
@@ -69,6 +75,9 @@ describe.skipIf(!dockerAvailable)('GET /api/library/chunks/:id', () => {
       '/api/library',
       createLibraryRoute({
         db: pg.db,
+        auth: fakeAuth(userId),
+        libraryRepo: new DrizzleLibraryEntryRepository(pg.db),
+        concurrencyLimit: 100,
         logger,
         enqueueDeps: { databaseUrl: pg.databaseUrl },
       }),
@@ -81,6 +90,8 @@ describe.skipIf(!dockerAvailable)('GET /api/library/chunks/:id', () => {
       languages: ['en'],
       downloadUrlEpub: EPUB_URL,
     })
+    // The reader must be an active member to resolve chunks (FR-008 / SC-002).
+    await addLibraryMembership(pg.db, userId, bookId)
 
     await worker.boot.boss.send('ingestion.download', { bookId })
     await waitForBookStatus(pg.db, bookId, 'ready', 90_000)

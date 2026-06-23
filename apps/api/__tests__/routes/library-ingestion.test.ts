@@ -1,3 +1,4 @@
+import type { LibraryEntryRepository } from '@dialogus/catalog'
 import type { Database } from '@dialogus/db'
 import { getTableName } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -5,6 +6,9 @@ import { pino, stdSerializers } from 'pino'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProblemMiddleware } from '../../src/infrastructure/http/middleware/problem'
 import { createLibraryRoute } from '../../src/infrastructure/http/routes/library'
+import { fakeAuth } from '../_helpers/auth'
+
+const USER_ID = 'user-1'
 
 interface BookRow {
   id: string
@@ -103,7 +107,24 @@ function buildFakeDb(initial: {
   return { db, state }
 }
 
-function buildApp(deps: { db: Database; enqueueImpl?: ReturnType<typeof vi.fn> }): {
+function fakeLibraryRepo(overrides: Partial<LibraryEntryRepository> = {}): LibraryEntryRepository {
+  return {
+    upsertMembership: vi.fn(async () => undefined),
+    isActiveMember: vi.fn(async () => true),
+    softRemove: vi.fn(async () => true),
+    restore: vi.fn(async () => true),
+    listForUser: vi.fn(async () => ({ books: [], nextCursor: null, total: 0 })),
+    countInFlight: vi.fn(async () => 0),
+    ...overrides,
+  }
+}
+
+function buildApp(deps: {
+  db: Database
+  enqueueImpl?: ReturnType<typeof vi.fn>
+  libraryRepo?: LibraryEntryRepository
+  concurrencyLimit?: number
+}): {
   app: Hono
   logger: ReturnType<typeof pino>
 } {
@@ -115,6 +136,9 @@ function buildApp(deps: { db: Database; enqueueImpl?: ReturnType<typeof vi.fn> }
   app.use('*', createProblemMiddleware({ logger }))
   const route = createLibraryRoute({
     db: deps.db,
+    auth: fakeAuth(USER_ID),
+    libraryRepo: deps.libraryRepo ?? fakeLibraryRepo(),
+    concurrencyLimit: deps.concurrencyLimit ?? 2,
     logger,
     enqueueDeps: { databaseUrl: 'postgres://test' },
     ...(deps.enqueueImpl ? { enqueueImpl: deps.enqueueImpl } : {}),
@@ -181,7 +205,36 @@ describe('POST /api/library/books/:id/ingest', () => {
       { databaseUrl: 'postgres://test' },
       'ingestion.download',
       { bookId: BOOK_ID },
+      { singletonKey: `ingest-${BOOK_ID}` },
     )
+  })
+
+  it('returns 429 ingestion-concurrency-limit when the user is at the cap', async () => {
+    const { db } = buildFakeDb({ book: { id: BOOK_ID, ingestionStatus: 'discovered' } })
+    const libraryRepo = fakeLibraryRepo({ countInFlight: vi.fn(async () => 2) })
+    const { app } = buildApp({ db, enqueueImpl, libraryRepo, concurrencyLimit: 2 })
+
+    const res = await app.request(postIngest())
+    const body = (await res.json()) as Record<string, unknown>
+
+    expect(res.status).toBe(429)
+    expect(res.headers.get('content-type')).toBe('application/problem+json')
+    expect(body.type).toBe('urn:dialogus:problems:ingestion-concurrency-limit')
+    expect(res.headers.get('retry-after')).toBe('60')
+    expect(enqueueImpl).not.toHaveBeenCalled()
+  })
+
+  it('returns 404 book-not-found when the user is not a member', async () => {
+    const { db } = buildFakeDb({ book: { id: BOOK_ID, ingestionStatus: 'discovered' } })
+    const libraryRepo = fakeLibraryRepo({ isActiveMember: vi.fn(async () => false) })
+    const { app } = buildApp({ db, enqueueImpl, libraryRepo })
+
+    const res = await app.request(postIngest())
+    const body = (await res.json()) as Record<string, unknown>
+
+    expect(res.status).toBe(404)
+    expect(body.type).toBe('urn:dialogus:problems:book-not-found')
+    expect(enqueueImpl).not.toHaveBeenCalled()
   })
 
   it('returns 409 book-not-in-discovered-state when book is downloading', async () => {
@@ -318,6 +371,20 @@ describe('GET /api/library/books/:id/ingestion', () => {
     expect(res.status).toBe(404)
     expect(body.type).toBe('urn:dialogus:problems:book-not-found')
   })
+
+  it('returns 404 book-not-found when the user is not a member (no status leak)', async () => {
+    const { db } = buildFakeDb({
+      book: { id: BOOK_ID, ingestionStatus: 'embedding', ingestionProgress: 42 },
+    })
+    const libraryRepo = fakeLibraryRepo({ isActiveMember: vi.fn(async () => false) })
+    const { app } = buildApp({ db, libraryRepo })
+
+    const res = await app.request(getIngestion())
+    const body = (await res.json()) as Record<string, unknown>
+
+    expect(res.status).toBe(404)
+    expect(body.type).toBe('urn:dialogus:problems:book-not-found')
+  })
 })
 
 describe('POST /api/library/books/:id/ingest/retry', () => {
@@ -441,5 +508,33 @@ describe('GET /api/library/chunks/:id', () => {
 
     expect(res.status).toBe(404)
     expect(body.type).toBe('urn:dialogus:problems:chunk-not-found')
+  })
+
+  it('returns 404 book-not-found when the chunk belongs to a book the user is not a member of', async () => {
+    const { db } = buildFakeDb({
+      chunkJoinRows: [
+        {
+          chunk: {
+            id: CHUNK_ID,
+            bookId: BOOK_ID,
+            chapterId: '00000000-0000-4000-8000-000000000099',
+            ordinal: 7,
+            text: 'Call me Ishmael.',
+            tokenCount: 4,
+            startChar: 0,
+            endChar: 16,
+          },
+          chapter: { ordinal: 1, title: 'Loomings' },
+        },
+      ],
+    })
+    const libraryRepo = fakeLibraryRepo({ isActiveMember: vi.fn(async () => false) })
+    const { app } = buildApp({ db, libraryRepo })
+
+    const res = await app.request(getChunkRequest())
+    const body = (await res.json()) as Record<string, unknown>
+
+    expect(res.status).toBe(404)
+    expect(body.type).toBe('urn:dialogus:problems:book-not-found')
   })
 })

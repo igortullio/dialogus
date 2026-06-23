@@ -3,6 +3,9 @@ import { restoreBook } from '../../src/application/restoreBook'
 import type { Book } from '../../src/domain/book/Book'
 import { BookNotFoundError } from '../../src/domain/book/BookError'
 import type { BookRepository } from '../../src/domain/book/BookRepository.port'
+import type { LibraryEntryRepository } from '../../src/domain/libraryEntry/LibraryEntryRepository.port'
+
+const USER = 'user-1'
 
 function makeBook(overrides: Partial<Book> = {}): Book {
   const now = new Date('2026-04-01T00:00:00Z')
@@ -17,7 +20,7 @@ function makeBook(overrides: Partial<Book> = {}): Book {
     downloadUrlTxt: null,
     coverUrl: null,
     rawHash: null,
-    ingestionStatus: 'discovered',
+    ingestionStatus: 'ready',
     ingestionError: null,
     tags: [],
     createdAt: now,
@@ -27,55 +30,59 @@ function makeBook(overrides: Partial<Book> = {}): Book {
   }
 }
 
-function fakeRepository(found: Book | null, restored?: Book): BookRepository {
+function fakeRepository(found: Book | null): BookRepository {
   return {
     save: vi.fn(),
     findById: vi.fn(async () => found),
     findByGutendexId: vi.fn(),
     list: vi.fn(),
     softDelete: vi.fn(),
-    restore: vi.fn(async () => {
-      if (!restored) {
-        throw new BookNotFoundError('not found')
-      }
-      return restored
-    }),
+    restore: vi.fn(),
+  }
+}
+
+function fakeLibraryRepo(restore: boolean): LibraryEntryRepository {
+  return {
+    upsertMembership: vi.fn(),
+    isActiveMember: vi.fn(),
+    softRemove: vi.fn(),
+    restore: vi.fn(async () => restore),
+    listForUser: vi.fn(),
+    countInFlight: vi.fn(),
   }
 }
 
 describe('restoreBook', () => {
-  it('restores a soft-deleted book and returns the restored entity', async () => {
-    const softDeleted = makeBook({
-      id: 'uuid-soft',
-      deletedAt: new Date('2026-04-10T00:00:00Z'),
-    })
-    const restored = makeBook({ id: 'uuid-soft', deletedAt: null })
-    const repository = fakeRepository(softDeleted, restored)
+  it('restores the membership and returns the shared book', async () => {
+    const book = makeBook({ id: 'uuid-soft' })
+    const repository = fakeRepository(book)
+    const libraryRepo = fakeLibraryRepo(true)
 
-    const out = await restoreBook({ repository }, 'uuid-soft')
+    const out = await restoreBook({ repository, libraryRepo }, USER, 'uuid-soft')
 
+    expect(libraryRepo.restore).toHaveBeenCalledWith(USER, 'uuid-soft')
     expect(repository.findById).toHaveBeenCalledWith('uuid-soft')
-    expect(repository.restore).toHaveBeenCalledWith('uuid-soft')
-    expect(out).toBe(restored)
-    expect(out.deletedAt).toBeNull()
+    expect(out).toBe(book)
   })
 
-  it('also calls restore for an already-active book (restore is idempotent at the port)', async () => {
-    const active = makeBook({ id: 'uuid-active', deletedAt: null })
-    const repository = fakeRepository(active, active)
+  it('throws BookNotFoundError when the user has no membership row to restore', async () => {
+    const repository = fakeRepository(makeBook())
+    const libraryRepo = fakeLibraryRepo(false)
 
-    const out = await restoreBook({ repository }, 'uuid-active')
-
-    expect(repository.restore).toHaveBeenCalledWith('uuid-active')
-    expect(out).toBe(active)
+    await expect(
+      restoreBook({ repository, libraryRepo }, USER, 'missing-uuid'),
+    ).rejects.toBeInstanceOf(BookNotFoundError)
+    expect(repository.findById).not.toHaveBeenCalled()
   })
 
-  it('throws BookNotFoundError when the book does not exist', async () => {
+  it('throws BookNotFoundError when the membership restores but the shared book is missing', async () => {
     const repository = fakeRepository(null)
+    const libraryRepo = fakeLibraryRepo(true)
 
-    await expect(restoreBook({ repository }, 'missing-uuid')).rejects.toBeInstanceOf(
-      BookNotFoundError,
+    await expect(restoreBook({ repository, libraryRepo }, USER, 'uuid-gone')).rejects.toMatchObject(
+      {
+        code: 'BOOK_NOT_FOUND',
+      },
     )
-    expect(repository.restore).not.toHaveBeenCalled()
   })
 })

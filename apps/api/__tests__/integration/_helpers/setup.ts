@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDatabase, createPgBoss, type Database } from '@dialogus/db'
-import { books } from '@dialogus/db/schema'
+import { books, libraryEntries, user } from '@dialogus/db/schema'
 import type { ChapterSummaryGenerator, EmbeddingProvider } from '@dialogus/ingestion'
 import type { StageDeps } from '@dialogus/ingestion/application/stages/_common'
 import { MockChapterSummaryGenerator } from '@dialogus/ingestion/infrastructure/external/MockChapterSummaryGenerator'
@@ -84,6 +85,35 @@ export async function insertDiscoveredBook(db: Database, input: BookFixtureInput
     .returning({ id: books.id })
   if (!row) throw new Error('failed to insert fixture book')
   return row.id
+}
+
+/**
+ * Insert a real `user` row (Better Auth's table) so `library_entries`/membership
+ * FK inserts succeed. Returns the user id. Pair with `fakeAuth(userId)` from
+ * `__tests__/_helpers/auth` to drive the library route as that user.
+ */
+export async function createTestUser(
+  db: Database,
+  overrides: { id?: string; email?: string; name?: string; role?: string } = {},
+): Promise<string> {
+  const id = overrides.id ?? `user-${randomUUID()}`
+  await db.insert(user).values({
+    id,
+    name: overrides.name ?? 'Test User',
+    email: overrides.email ?? `${id}@test.local`,
+    emailVerified: true,
+    role: overrides.role ?? 'member',
+  })
+  return id
+}
+
+/** Give a user an active membership over a shared book (FR-007). */
+export async function addLibraryMembership(
+  db: Database,
+  userId: string,
+  bookId: string,
+): Promise<void> {
+  await db.insert(libraryEntries).values({ userId, bookId })
 }
 
 export async function readBookRow(db: Database, bookId: string) {

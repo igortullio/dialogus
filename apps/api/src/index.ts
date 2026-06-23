@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url'
 import { addBookToLibrary, getBook, listLibrary, removeBook, restoreBook } from '@dialogus/catalog'
 import { GutendexHttpClient } from '@dialogus/catalog/src/infrastructure/external/GutendexHttpClient'
 import { DrizzleBookRepository } from '@dialogus/catalog/src/infrastructure/persistence/DrizzleBookRepository'
+import { DrizzleLibraryEntryRepository } from '@dialogus/catalog/src/infrastructure/persistence/DrizzleLibraryEntryRepository'
 import { createDatabase, type Database } from '@dialogus/db'
 import { type DialogusEnv, loadConfig, loadEnvFromRoot } from '@dialogus/shared/config'
 import { type ServerType, serve } from '@hono/node-server'
@@ -178,18 +179,23 @@ export async function main(): Promise<void> {
     const authApp = createAuthRoute(auth)
 
     const repository = new DrizzleBookRepository(db)
+    const libraryRepo = new DrizzleLibraryEntryRepository(db)
     const gutendexClient = new GutendexHttpClient()
 
     const catalogApp = createCatalogRoute({ gutendexClient })
     const libraryApp = createLibraryRoute({
       db,
+      auth,
+      libraryRepo,
+      concurrencyLimit: config.INGESTION_USER_CONCURRENCY_LIMIT,
+      logger,
       enqueueDeps: { databaseUrl: config.DATABASE_URL },
-      addBookToLibrary: (gutendexId) =>
-        addBookToLibrary({ repository, client: gutendexClient }, gutendexId),
-      listLibrary: (input) => listLibrary({ repository }, input),
-      getBook: (id) => getBook({ repository }, id),
-      removeBook: (id) => removeBook({ repository }, id),
-      restoreBook: (id) => restoreBook({ repository }, id),
+      addBookToLibrary: (userId, gutendexId) =>
+        addBookToLibrary({ repository, libraryRepo, client: gutendexClient }, userId, gutendexId),
+      listLibrary: (userId, input) => listLibrary({ libraryRepo }, userId, input),
+      getBook: (userId, id) => getBook({ repository, libraryRepo }, userId, id),
+      removeBook: (userId, id) => removeBook({ libraryRepo }, userId, id),
+      restoreBook: (userId, id) => restoreBook({ repository, libraryRepo }, userId, id),
     })
 
     const boot = await start({

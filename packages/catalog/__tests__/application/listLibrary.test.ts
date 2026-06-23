@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { listLibrary } from '../../src/application/listLibrary'
 import type { Book } from '../../src/domain/book/Book'
-import type { BookRepository, ListResult } from '../../src/domain/book/BookRepository.port'
+import type { ListResult } from '../../src/domain/book/BookRepository.port'
+import type { LibraryEntryRepository } from '../../src/domain/libraryEntry/LibraryEntryRepository.port'
+
+const USER = 'user-1'
 
 function makeBook(overrides: Partial<Book> = {}): Book {
   const now = new Date('2026-04-01T00:00:00Z')
@@ -26,43 +29,45 @@ function makeBook(overrides: Partial<Book> = {}): Book {
   }
 }
 
-function fakeRepository(listResult: ListResult): BookRepository {
+function fakeLibraryRepo(listResult: ListResult): LibraryEntryRepository {
   return {
-    save: vi.fn(),
-    findById: vi.fn(),
-    findByGutendexId: vi.fn(),
-    list: vi.fn(async () => listResult),
-    softDelete: vi.fn(),
+    upsertMembership: vi.fn(),
+    isActiveMember: vi.fn(),
+    softRemove: vi.fn(),
     restore: vi.fn(),
+    listForUser: vi.fn(async () => listResult),
+    countInFlight: vi.fn(),
   }
 }
 
 describe('listLibrary', () => {
-  it('returns the repository response unchanged for an empty filter and no cursor', async () => {
+  it('forwards an empty filter and no cursor to listForUser scoped to the user', async () => {
     const result: ListResult = { books: [], nextCursor: null, total: 0 }
-    const repository = fakeRepository(result)
+    const libraryRepo = fakeLibraryRepo(result)
 
-    const out = await listLibrary({ repository }, { filter: {}, cursor: undefined })
+    const out = await listLibrary({ libraryRepo }, USER, { filter: {}, cursor: undefined })
 
-    expect(repository.list).toHaveBeenCalledWith({}, undefined, undefined)
+    expect(libraryRepo.listForUser).toHaveBeenCalledWith(USER, {}, undefined, undefined)
     expect(out).toBe(result)
   })
 
-  it('forwards filter, cursor, and limit through to the repository', async () => {
+  it('forwards filter, cursor, and limit through to listForUser', async () => {
     const result: ListResult = {
       books: [makeBook({ id: 'a' }), makeBook({ id: 'b' })],
       nextCursor: { createdAt: new Date('2026-04-02T00:00:00Z'), id: 'b' },
       total: 2,
     }
-    const repository = fakeRepository(result)
+    const libraryRepo = fakeLibraryRepo(result)
     const cursor = { createdAt: new Date('2026-03-15T00:00:00Z'), id: 'prev-id' }
 
-    const out = await listLibrary(
-      { repository },
-      { filter: { status: 'ready', language: 'pt', includeDeleted: true }, cursor, limit: 10 },
-    )
+    const out = await listLibrary({ libraryRepo }, USER, {
+      filter: { status: 'ready', language: 'pt', includeDeleted: true },
+      cursor,
+      limit: 10,
+    })
 
-    expect(repository.list).toHaveBeenCalledWith(
+    expect(libraryRepo.listForUser).toHaveBeenCalledWith(
+      USER,
       { status: 'ready', language: 'pt', includeDeleted: true },
       cursor,
       10,
@@ -78,9 +83,9 @@ describe('listLibrary', () => {
       nextCursor: null,
       total: 1,
     }
-    const repository = fakeRepository(result)
+    const libraryRepo = fakeLibraryRepo(result)
 
-    const out = await listLibrary({ repository }, { filter: {} })
+    const out = await listLibrary({ libraryRepo }, USER, { filter: {} })
 
     expect(out.books).toBe(result.books)
     expect(out.nextCursor).toBeNull()

@@ -1,4 +1,4 @@
-import { BookNotFoundError } from '@dialogus/catalog'
+import { BookNotFoundError, type LibraryEntryRepository } from '@dialogus/catalog'
 import type { Database } from '@dialogus/db'
 import { books } from '@dialogus/db/schema'
 import type { IngestionStatusDto } from '@dialogus/shared/schemas/ingestion'
@@ -7,12 +7,18 @@ import { isIngestionStage, parseIngestionErrorField, statusToActiveStage } from 
 
 export interface GetIngestionStatusDeps {
   readonly db: Database
+  readonly libraryRepo: LibraryEntryRepository
 }
 
 export async function getIngestionStatus(
   deps: GetIngestionStatusDeps,
+  userId: string,
   bookId: string,
 ): Promise<IngestionStatusDto> {
+  // Don't reveal the status of un-added (or cross-user) titles (FR-007, SC-002).
+  const isMember = await deps.libraryRepo.isActiveMember(userId, bookId)
+  if (!isMember) throw new BookNotFoundError(`Book ${bookId} not found`)
+
   const row = await deps.db.query.books.findFirst({
     where: eq(books.id, bookId),
     columns: {

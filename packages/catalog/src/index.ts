@@ -1,5 +1,6 @@
 export {
   type AddBookToLibraryDeps,
+  type AddBookToLibraryResult,
   addBookToLibrary,
 } from './application/addBookToLibrary'
 export {

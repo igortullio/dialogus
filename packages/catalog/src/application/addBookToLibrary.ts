@@ -1,37 +1,42 @@
 import { randomUUID } from 'node:crypto'
 import type { Book } from '../domain/book/Book'
-import { DuplicateBookError } from '../domain/book/BookError'
 import type { BookRepository } from '../domain/book/BookRepository.port'
 import type { GutendexBook, GutendexClient } from '../domain/book/GutendexClient.port'
+import type { LibraryEntryRepository } from '../domain/libraryEntry/LibraryEntryRepository.port'
 
 export interface AddBookToLibraryDeps {
   repository: BookRepository
+  libraryRepo: LibraryEntryRepository
   client: GutendexClient
 }
 
-export async function addBookToLibrary(
-  deps: AddBookToLibraryDeps,
-  gutendexId: number,
-): Promise<Book> {
-  const existing = await deps.repository.findByGutendexId(gutendexId)
-  if (existing) {
-    throw buildDuplicateError(gutendexId, existing)
-  }
-  const dto = await deps.client.getBook(gutendexId)
-  return deps.repository.save(toNewBook(dto))
+export interface AddBookToLibraryResult {
+  /** The shared corpus book (resolved or newly created). */
+  book: Book
+  /** True when the shared book still needs ingestion (`discovered`). */
+  needsIngestion: boolean
 }
 
-function buildDuplicateError(gutendexId: number, existing: Book): DuplicateBookError {
-  if (existing.deletedAt === null) {
-    return new DuplicateBookError(
-      `Gutendex ID ${gutendexId} is already in library as book ${existing.id}.`,
-      { existingBookId: existing.id },
-    )
-  }
-  return new DuplicateBookError(
-    `Gutendex ID ${gutendexId} exists as soft-deleted book ${existing.id}. Use POST /api/library/books/${existing.id}/restore to restore it.`,
-    { existingBookId: existing.id },
-  )
+/**
+ * Add a title to the user's library over the shared corpus. Idempotent:
+ * resolve-or-create the shared book by `gutendex_id`, then upsert the user's
+ * membership (insert or clear a prior soft-remove). Re-adding an already-ingested
+ * title is instant (no enqueue) — the caller decides whether to ingest via
+ * `needsIngestion`. There is no `DuplicateBookError` anymore: adding is a no-op
+ * success for an active member and a restore for a removed one.
+ */
+export async function addBookToLibrary(
+  deps: AddBookToLibraryDeps,
+  userId: string,
+  gutendexId: number,
+): Promise<AddBookToLibraryResult> {
+  const existing = await deps.repository.findByGutendexId(gutendexId)
+  const book =
+    existing ?? (await deps.repository.save(toNewBook(await deps.client.getBook(gutendexId))))
+
+  await deps.libraryRepo.upsertMembership(userId, book.id)
+
+  return { book, needsIngestion: book.ingestionStatus === 'discovered' }
 }
 
 function toNewBook(dto: GutendexBook): Book {

@@ -21,6 +21,10 @@ export interface LibraryEntryRepository {
     cursor?: Cursor,
     limit?: number,
   ): Promise<ListResult>
-  /** Count the user's active memberships whose book ingestion is still in flight (FR-021). */
+  /**
+   * Count the user's active memberships whose book is actively ingesting
+   * (status in `downloading`…`indexing`). Excludes `discovered` (not started),
+   * `ready`/`failed` (terminal). This is the cap input for FR-021.
+   */
   countInFlight(userId: string): Promise<number>
 }

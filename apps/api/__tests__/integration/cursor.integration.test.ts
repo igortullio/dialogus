@@ -6,7 +6,7 @@ import type { Book } from '@dialogus/catalog'
 import { getBook, listLibrary, removeBook, restoreBook } from '@dialogus/catalog'
 import type { Database } from '@dialogus/db'
 import { createDatabase } from '@dialogus/db'
-import { books, idempotencyKeys } from '@dialogus/db/schema'
+import { books, idempotencyKeys, libraryEntries, user } from '@dialogus/db/schema'
 import { decodeCursor } from '@dialogus/shared/http/cursor'
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
@@ -14,36 +14,45 @@ import { Hono } from 'hono'
 import { pino } from 'pino'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { DrizzleBookRepository } from '../../../../packages/catalog/src/infrastructure/persistence/DrizzleBookRepository'
+import { DrizzleLibraryEntryRepository } from '../../../../packages/catalog/src/infrastructure/persistence/DrizzleLibraryEntryRepository'
 import {
   createProblemMiddleware,
   type ProblemVariables,
 } from '../../src/infrastructure/http/middleware/problem'
 import { createLibraryRoute } from '../../src/infrastructure/http/routes/library'
+import { fakeAuth } from '../_helpers/auth'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const migrationsFolder = resolve(__dirname, '../../../../packages/db/drizzle')
 
 const dockerAvailable = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}']).status === 0
 
+const USER_ID = 'user-cursor-int'
+
 function buildApp(db: Database): {
   app: Hono<{ Variables: ProblemVariables }>
   bookRepository: DrizzleBookRepository
 } {
   const bookRepository = new DrizzleBookRepository(db)
+  const libraryRepo = new DrizzleLibraryEntryRepository(db)
   const app = new Hono<{ Variables: ProblemVariables }>()
   app.use('*', createProblemMiddleware({ logger: pino({ level: 'silent' }) }))
   app.route(
     '/api/library',
     createLibraryRoute({
       db,
+      auth: fakeAuth(USER_ID),
+      libraryRepo,
+      concurrencyLimit: 100,
       enqueueDeps: { databaseUrl: 'postgres://test' },
       addBookToLibrary: async () => {
         throw new Error('not used in cursor tests')
       },
-      listLibrary: (input) => listLibrary({ repository: bookRepository }, input),
-      getBook: (id) => getBook({ repository: bookRepository }, id),
-      removeBook: (id) => removeBook({ repository: bookRepository }, id),
-      restoreBook: (id) => restoreBook({ repository: bookRepository }, id),
+      listLibrary: (userId, input) => listLibrary({ libraryRepo }, userId, input),
+      getBook: (userId, id) => getBook({ repository: bookRepository, libraryRepo }, userId, id),
+      removeBook: (userId, id) => removeBook({ libraryRepo }, userId, id),
+      restoreBook: (userId, id) =>
+        restoreBook({ repository: bookRepository, libraryRepo }, userId, id),
     }),
   )
   return { app, bookRepository }
@@ -86,6 +95,13 @@ describe.skipIf(!dockerAvailable)('Cursor pagination (Testcontainers)', () => {
       .start()
     db = createDatabase(container.getConnectionUri())
     await migrate(db, { migrationsFolder })
+    await db.insert(user).values({
+      id: USER_ID,
+      name: 'Cursor Integration User',
+      email: 'cursor-int@test.local',
+      emailVerified: true,
+      role: 'member',
+    })
     ;({ app, bookRepository } = buildApp(db))
   }, 180_000)
 
@@ -99,8 +115,15 @@ describe.skipIf(!dockerAvailable)('Cursor pagination (Testcontainers)', () => {
 
   beforeEach(async () => {
     await db.delete(idempotencyKeys)
+    await db.delete(libraryEntries)
     await db.delete(books)
   })
+
+  // Membership add_at mirrors each book's createdAt so the keyset cursor (over
+  // library_entries.added_at) and the DTO's created_at stay in the same order.
+  async function addMembership(bookId: string, addedAt: Date): Promise<void> {
+    await db.insert(libraryEntries).values({ userId: USER_ID, bookId, addedAt })
+  }
 
   async function insertBooks(count: number, baseTime: Date): Promise<Book[]> {
     const inserted: Book[] = []
@@ -108,6 +131,7 @@ describe.skipIf(!dockerAvailable)('Cursor pagination (Testcontainers)', () => {
       const createdAt = new Date(baseTime.getTime() - i * 1000)
       const book = makeBook({ createdAt, updatedAt: createdAt })
       const saved = await bookRepository.save(book)
+      await addMembership(saved.id, createdAt)
       inserted.push(saved)
     }
     return inserted
@@ -196,11 +220,10 @@ describe.skipIf(!dockerAvailable)('Cursor pagination (Testcontainers)', () => {
     expect(position.createdAt).toBeInstanceOf(Date)
 
     // Insert a new book AFTER getting the page 1 cursor — it has a newer createdAt
-    const newBook = makeBook({
-      createdAt: new Date(baseTime.getTime() + 60_000),
-      updatedAt: new Date(baseTime.getTime() + 60_000),
-    })
+    const newAddedAt = new Date(baseTime.getTime() + 60_000)
+    const newBook = makeBook({ createdAt: newAddedAt, updatedAt: newAddedAt })
     await bookRepository.save(newBook)
+    await addMembership(newBook.id, newAddedAt)
 
     // Page 2 — new book should NOT appear
     const page2Res = await app.request(`/api/library/books?cursor=${cursor}&limit=20`)

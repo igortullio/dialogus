@@ -319,12 +319,13 @@ describe('INGESTION_PROBLEM_SLUGS registry', () => {
       'ingestion-parse-failed': 422,
       'ingestion-summarize-failed': 503,
       'ingestion-embed-failed': 503,
+      'ingestion-concurrency-limit': 429,
       'chunk-not-found': 404,
     })
   })
 
-  it('exposes exactly eight slugs (task_01 inventory + ADR-008 summarize)', () => {
-    expect(Object.keys(INGESTION_PROBLEM_SLUGS)).toHaveLength(8)
+  it('exposes exactly nine slugs (task_01 inventory + ADR-008 summarize + US2 concurrency cap)', () => {
+    expect(Object.keys(INGESTION_PROBLEM_SLUGS)).toHaveLength(9)
   })
 })
 

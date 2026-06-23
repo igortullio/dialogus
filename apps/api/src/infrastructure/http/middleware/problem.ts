@@ -33,6 +33,7 @@ export const INGESTION_PROBLEM_SLUGS = {
   'ingestion-parse-failed': 422,
   'ingestion-summarize-failed': 503,
   'ingestion-embed-failed': 503,
+  'ingestion-concurrency-limit': 429,
   'chunk-not-found': 404,
 } as const satisfies Record<string, number>
 
@@ -42,6 +43,7 @@ const INGESTION_PROBLEM_SLUGS_WITH_RETRY_AFTER: ReadonlySet<IngestionProblemSlug
   'ingestion-download-failed',
   'ingestion-summarize-failed',
   'ingestion-embed-failed',
+  'ingestion-concurrency-limit',
 ])
 
 const INGESTION_ERROR_CODE_TO_SLUG: Readonly<Record<string, IngestionProblemSlug>> = {
@@ -52,6 +54,7 @@ const INGESTION_ERROR_CODE_TO_SLUG: Readonly<Record<string, IngestionProblemSlug
   INGESTION_PARSE_FAILED: 'ingestion-parse-failed',
   INGESTION_SUMMARIZE_FAILED: 'ingestion-summarize-failed',
   INGESTION_EMBED_FAILED: 'ingestion-embed-failed',
+  INGESTION_CONCURRENCY_LIMIT: 'ingestion-concurrency-limit',
   CHUNK_NOT_FOUND: 'chunk-not-found',
 }
 

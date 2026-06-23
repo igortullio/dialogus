@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./src/infrastructure/external/GutendexHttpClient": "./src/infrastructure/external/GutendexHttpClient.ts",
-    "./src/infrastructure/persistence/DrizzleBookRepository": "./src/infrastructure/persistence/DrizzleBookRepository.ts"
+    "./src/infrastructure/persistence/DrizzleBookRepository": "./src/infrastructure/persistence/DrizzleBookRepository.ts",
+    "./src/infrastructure/persistence/DrizzleLibraryEntryRepository": "./src/infrastructure/persistence/DrizzleLibraryEntryRepository.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

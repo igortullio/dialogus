@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { addBookToLibrary } from '../../src/application/addBookToLibrary'
 import type { Book } from '../../src/domain/book/Book'
-import { DuplicateBookError, GutendexUpstreamError } from '../../src/domain/book/BookError'
+import { GutendexUpstreamError } from '../../src/domain/book/BookError'
 import type { BookRepository } from '../../src/domain/book/BookRepository.port'
 import type { GutendexBook, GutendexClient } from '../../src/domain/book/GutendexClient.port'
+import type { LibraryEntryRepository } from '../../src/domain/libraryEntry/LibraryEntryRepository.port'
+
+const USER = 'user-1'
 
 function gutendexBook(overrides: Partial<GutendexBook> = {}): GutendexBook {
   return {
@@ -54,6 +57,18 @@ function fakeRepository(overrides: Partial<BookRepository> = {}): BookRepository
   }
 }
 
+function fakeLibraryRepo(overrides: Partial<LibraryEntryRepository> = {}): LibraryEntryRepository {
+  return {
+    upsertMembership: vi.fn(async () => undefined),
+    isActiveMember: vi.fn(async () => true),
+    softRemove: vi.fn(async () => true),
+    restore: vi.fn(async () => true),
+    listForUser: vi.fn(async () => ({ books: [], nextCursor: null, total: 0 })),
+    countInFlight: vi.fn(async () => 0),
+    ...overrides,
+  }
+}
+
 function fakeClient(overrides: Partial<GutendexClient> = {}): GutendexClient {
   return {
     search: vi.fn(async () => ({ books: [], nextPage: null, count: 0 })),
@@ -63,104 +78,97 @@ function fakeClient(overrides: Partial<GutendexClient> = {}): GutendexClient {
 }
 
 describe('addBookToLibrary', () => {
-  it('on empty repo fetches from Gutendex, maps to discovered, and saves', async () => {
+  it('on a new title fetches from Gutendex, maps to discovered, saves, and upserts membership', async () => {
     const dto = gutendexBook({ id: 996 })
     const repository = fakeRepository()
+    const libraryRepo = fakeLibraryRepo()
     const client = fakeClient({ getBook: vi.fn(async () => dto) })
 
-    const result = await addBookToLibrary({ repository, client }, 996)
+    const { book, needsIngestion } = await addBookToLibrary(
+      { repository, libraryRepo, client },
+      USER,
+      996,
+    )
 
     expect(repository.findByGutendexId).toHaveBeenCalledWith(996)
     expect(client.getBook).toHaveBeenCalledWith(996)
     expect(repository.save).toHaveBeenCalledTimes(1)
-    expect(result.gutendexId).toBe(996)
-    expect(result.title).toBe('Don Quixote')
-    expect(result.ingestionStatus).toBe('discovered')
-    expect(result.ingestionError).toBeNull()
-    expect(result.deletedAt).toBeNull()
-    expect(result.tags).toEqual([])
-    expect(result.rawHash).toBeNull()
-    expect(result.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
-    expect(result.createdAt).toBeInstanceOf(Date)
-    expect(result.updatedAt).toBeInstanceOf(Date)
+    expect(libraryRepo.upsertMembership).toHaveBeenCalledWith(USER, book.id)
+    expect(book.gutendexId).toBe(996)
+    expect(book.title).toBe('Don Quixote')
+    expect(book.ingestionStatus).toBe('discovered')
+    expect(book.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+    expect(needsIngestion).toBe(true)
   })
 
-  it('returns the book that the repository.save returns (preserves DB-assigned timestamps)', async () => {
+  it('returns the book that repository.save returns (preserves DB-assigned timestamps)', async () => {
     const persistedAt = new Date('2026-04-25T12:00:00Z')
-    const dto = gutendexBook({ id: 996 })
     const persisted = existingBook({
       id: 'persisted-uuid',
       createdAt: persistedAt,
       updatedAt: persistedAt,
     })
     const repository = fakeRepository({ save: vi.fn(async () => persisted) })
-    const client = fakeClient({ getBook: vi.fn(async () => dto) })
-
-    const result = await addBookToLibrary({ repository, client }, 996)
-
-    expect(result).toBe(persisted)
-    expect(result.id).toBe('persisted-uuid')
-  })
-
-  it('throws DuplicateBookError with existingBookId when an active book exists', async () => {
-    const existing = existingBook({ id: 'active-uuid', deletedAt: null })
-    const repository = fakeRepository({ findByGutendexId: vi.fn(async () => existing) })
+    const libraryRepo = fakeLibraryRepo()
     const client = fakeClient()
 
-    await expect(addBookToLibrary({ repository, client }, 996)).rejects.toMatchObject({
-      name: 'DuplicateBookError',
-      code: 'DUPLICATE_GUTENDEX_ID',
-      existingBookId: 'active-uuid',
-    })
-    expect(client.getBook).not.toHaveBeenCalled()
-    expect(repository.save).not.toHaveBeenCalled()
+    const { book } = await addBookToLibrary({ repository, libraryRepo, client }, USER, 996)
+
+    expect(book).toBe(persisted)
+    expect(book.id).toBe('persisted-uuid')
   })
 
-  it('throws DuplicateBookError instance when an active book exists', async () => {
-    const existing = existingBook({ id: 'active-uuid', deletedAt: null })
+  it('is idempotent: an existing shared book is reused (no Gutendex fetch, no save) and membership upserted', async () => {
+    const existing = existingBook({ id: 'shared-uuid' })
     const repository = fakeRepository({ findByGutendexId: vi.fn(async () => existing) })
+    const libraryRepo = fakeLibraryRepo()
     const client = fakeClient()
 
-    await expect(addBookToLibrary({ repository, client }, 996)).rejects.toBeInstanceOf(
-      DuplicateBookError,
+    const { book, needsIngestion } = await addBookToLibrary(
+      { repository, libraryRepo, client },
+      USER,
+      996,
     )
-  })
 
-  it('throws DuplicateBookError pointing at /restore when an existing book is soft-deleted', async () => {
-    const existing = existingBook({
-      id: 'soft-uuid',
-      deletedAt: new Date('2026-04-10T00:00:00Z'),
-    })
-    const repository = fakeRepository({ findByGutendexId: vi.fn(async () => existing) })
-    const client = fakeClient()
-
-    let captured: unknown
-    try {
-      await addBookToLibrary({ repository, client }, 996)
-    } catch (err) {
-      captured = err
-    }
-
-    expect(captured).toBeInstanceOf(DuplicateBookError)
-    const err = captured as DuplicateBookError
-    expect(err.existingBookId).toBe('soft-uuid')
-    expect(err.message).toContain('/restore')
-    expect(err.message).toContain('soft-uuid')
     expect(client.getBook).not.toHaveBeenCalled()
     expect(repository.save).not.toHaveBeenCalled()
+    expect(libraryRepo.upsertMembership).toHaveBeenCalledWith(USER, 'shared-uuid')
+    expect(book).toBe(existing)
+    expect(needsIngestion).toBe(true)
   })
 
-  it('does not catch GutendexUpstreamError — it propagates to the caller', async () => {
+  it('instant re-add: an already-ingested shared title needs no ingestion (SC-003/004)', async () => {
+    const ready = existingBook({ id: 'ready-uuid', ingestionStatus: 'ready' })
+    const repository = fakeRepository({ findByGutendexId: vi.fn(async () => ready) })
+    const libraryRepo = fakeLibraryRepo()
+    const client = fakeClient()
+
+    const { book, needsIngestion } = await addBookToLibrary(
+      { repository, libraryRepo, client },
+      USER,
+      996,
+    )
+
+    expect(book).toBe(ready)
+    expect(needsIngestion).toBe(false)
+    expect(libraryRepo.upsertMembership).toHaveBeenCalledWith(USER, 'ready-uuid')
+  })
+
+  it('does not catch GutendexUpstreamError — it propagates and nothing is saved or joined', async () => {
     const upstream = new GutendexUpstreamError(503, 'gutendex unavailable')
     const repository = fakeRepository()
+    const libraryRepo = fakeLibraryRepo()
     const client = fakeClient({
       getBook: vi.fn(async () => {
         throw upstream
       }),
     })
 
-    await expect(addBookToLibrary({ repository, client }, 996)).rejects.toBe(upstream)
+    await expect(addBookToLibrary({ repository, libraryRepo, client }, USER, 996)).rejects.toBe(
+      upstream,
+    )
     expect(repository.save).not.toHaveBeenCalled()
+    expect(libraryRepo.upsertMembership).not.toHaveBeenCalled()
   })
 
   it('passes the persisted Book shape through to repository.save', async () => {
@@ -174,9 +182,10 @@ describe('addBookToLibrary', () => {
       coverUrl: null,
     })
     const repository = fakeRepository()
+    const libraryRepo = fakeLibraryRepo()
     const client = fakeClient({ getBook: vi.fn(async () => dto) })
 
-    await addBookToLibrary({ repository, client }, 1342)
+    await addBookToLibrary({ repository, libraryRepo, client }, USER, 1342)
 
     const saveMock = repository.save as ReturnType<typeof vi.fn>
     expect(saveMock).toHaveBeenCalledTimes(1)
@@ -186,9 +195,6 @@ describe('addBookToLibrary', () => {
     expect(saved?.title).toBe('Pride and Prejudice')
     expect(saved?.languages).toEqual(['en', 'pt'])
     expect(saved?.subjects).toEqual(['Romance'])
-    expect(saved?.downloadUrlEpub).toBeNull()
-    expect(saved?.downloadUrlTxt).toBeNull()
-    expect(saved?.coverUrl).toBeNull()
     expect(saved?.ingestionStatus).toBe('discovered')
     expect(saved?.tags).toEqual([])
     expect(saved?.deletedAt).toBeNull()

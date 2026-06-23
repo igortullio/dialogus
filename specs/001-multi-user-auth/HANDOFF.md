@@ -19,7 +19,10 @@ docs(...):     spec, plan, research, data-model, contracts, tasks
 - **Foundational (T001–T015)** ✅ committed, runtime-validated (migration `0008`, owner seed, sign-in/session/invite-only).
 - **US1 — login + conversation isolation (T016–T025)** ✅ **complete**, validated live (auth gate, authenticated thread proxy, leak closed, Mastra `server.middleware` hardening).
 - **US2 — data + repository (T029–T031)** ✅ committed (migration `0009` applied; `LibraryEntryRepository` implemented).
-- **US2 — app/API/web (T026–T028, T032–T039)** ⬜ remaining (see below). US3, US4 untouched.
+- **US2 — catalog app fns + API route/main (T032–T034)** ✅ **done** — catalog fns user-scoped + idempotent add (`{book, needsIngestion}`, no more `DuplicateBookError`); `/api/library` gated by `requireAuth` via `createLibraryRoute` (Step 3 test-auth pattern = stub `fakeAuth(userId)` for unit + real `user` row via `createTestUser` for Testcontainers); deterministic `ingest-{bookId}` pg-boss `singletonKey`; membership auth on ingest/retry/status/chunk; per-user concurrency cap (`429 ingestion-concurrency-limit`). All ~8 API test files updated; gate green (`pnpm lint && pnpm -r typecheck && pnpm -r test`) + all 4 Testcontainers integration suites pass.
+- **US2 — web + spoiler caps (T035–T039)** ⬜ remaining (Step 4 below). **US2 — isolation tests (T026–T028)** ⬜ remaining (Step 5). US3, US4 untouched.
+
+> Note for the web slice: `addBook` is now idempotent server-side (returns `201` even on re-add; never `409 duplicate-gutendex-id`) and the server auto-ingests on `discovered`. `DuplicateBookError` + its `duplicate-gutendex-id` problem mapping are now dead (kept for now) — T038 removes the `AddGutendexSheet` workaround that consumes them. The API `GET /books/:id` for a removed/non-member book now returns `book-not-found` (was 200 with `deleted_at`); per-user "removed" state lives in `library_entries.deleted_at`, never in the book DTO's `deleted_at`.
 
 Single source of truth for remaining work: **`specs/001-multi-user-auth/tasks.md`** (checkboxes).
 

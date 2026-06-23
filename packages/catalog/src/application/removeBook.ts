@@ -1,14 +1,18 @@
 import { BookNotFoundError } from '../domain/book/BookError'
-import type { BookRepository } from '../domain/book/BookRepository.port'
+import type { LibraryEntryRepository } from '../domain/libraryEntry/LibraryEntryRepository.port'
 
 export interface RemoveBookDeps {
-  repository: BookRepository
+  libraryRepo: LibraryEntryRepository
 }
 
-export async function removeBook(deps: RemoveBookDeps, id: string): Promise<void> {
-  const existing = await deps.repository.findById(id)
-  if (!existing || existing.deletedAt !== null) {
+/**
+ * Remove a title from the user's library (soft-remove the membership only; never
+ * touches the shared `books` row — FR-013). Removing a title the user does not
+ * actively have resolves to `BookNotFoundError`.
+ */
+export async function removeBook(deps: RemoveBookDeps, userId: string, id: string): Promise<void> {
+  const removed = await deps.libraryRepo.softRemove(userId, id)
+  if (!removed) {
     throw new BookNotFoundError(`Book ${id} not found`)
   }
-  await deps.repository.softDelete(id)
 }

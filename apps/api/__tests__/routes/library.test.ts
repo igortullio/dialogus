@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { Book, ListLibraryInput, ListResult } from '@dialogus/catalog'
+import type { Book, LibraryEntryRepository, ListLibraryInput, ListResult } from '@dialogus/catalog'
 import { BookNotFoundError, DuplicateBookError } from '@dialogus/catalog'
 import type { Database } from '@dialogus/db'
 import { encodeCursor } from '@dialogus/shared/http/cursor'
@@ -15,8 +15,10 @@ import {
   createLibraryRoute,
   type LibraryRouteDeps,
 } from '../../src/infrastructure/http/routes/library'
+import { fakeAuth } from '../_helpers/auth'
 
 const BOOK_ID = '550e8400-e29b-41d4-a716-446655440000'
+const USER_ID = 'user-1'
 
 const SAMPLE_BOOK: Book = {
   id: BOOK_ID,
@@ -55,11 +57,27 @@ function makeMockDb(
   } as unknown as Database
 }
 
+function fakeLibraryRepo(): LibraryEntryRepository {
+  return {
+    upsertMembership: vi.fn(async () => undefined),
+    isActiveMember: vi.fn(async () => true),
+    softRemove: vi.fn(async () => true),
+    restore: vi.fn(async () => true),
+    listForUser: vi.fn(async () => ({ books: [], nextCursor: null, total: 0 })),
+    countInFlight: vi.fn(async () => 0),
+  }
+}
+
 function makeDeps(overrides: Partial<LibraryRouteDeps> = {}): LibraryRouteDeps {
   return {
     db: makeMockDb(),
+    auth: fakeAuth(USER_ID),
+    libraryRepo: fakeLibraryRepo(),
+    concurrencyLimit: 2,
     enqueueDeps: { databaseUrl: 'postgres://test' },
-    addBookToLibrary: vi.fn().mockResolvedValue(SAMPLE_BOOK),
+    // `needsIngestion: false` keeps these CRUD-route tests free of the auto-ingest
+    // path (exercised in library-ingestion.test.ts).
+    addBookToLibrary: vi.fn().mockResolvedValue({ book: SAMPLE_BOOK, needsIngestion: false }),
     listLibrary: vi
       .fn()
       .mockResolvedValue({ books: [SAMPLE_BOOK], nextCursor: null, total: 1 } satisfies ListResult),
@@ -99,7 +117,7 @@ describe('POST /library/books', () => {
     const authors = data?.authors as Array<Record<string, unknown>>
     expect(authors[0]?.birth_year).toBe(1547)
     expect(authors[0]?.death_year).toBe(1616)
-    expect(vi.mocked(deps.addBookToLibrary)).toHaveBeenCalledWith(996)
+    expect(vi.mocked(deps.addBookToLibrary)).toHaveBeenCalledWith(USER_ID, 996)
   })
 
   it('returns 400 validation-failed for invalid body', async () => {
@@ -210,7 +228,8 @@ describe('GET /library/books', () => {
     await app.request('/library/books?status=discovered&language=en&include_deleted=true')
 
     const call = vi.mocked(deps.listLibrary).mock.calls[0]
-    const input = call?.[0] as ListLibraryInput
+    expect(call?.[0]).toBe(USER_ID)
+    const input = call?.[1] as ListLibraryInput
     expect(input?.filter.status).toBe('discovered')
     expect(input?.filter.language).toBe('en')
     expect(input?.filter.includeDeleted).toBe(true)
@@ -298,7 +317,7 @@ describe('DELETE /library/books/:id', () => {
     expect(res.status).toBe(204)
     expect(await res.text()).toBe('')
     expect(vi.mocked(deps.removeBook)).toHaveBeenCalledOnce()
-    expect(vi.mocked(deps.removeBook)).toHaveBeenCalledWith(BOOK_ID)
+    expect(vi.mocked(deps.removeBook)).toHaveBeenCalledWith(USER_ID, BOOK_ID)
   })
 
   it('returns 404 when removeBook throws BookNotFoundError', async () => {
@@ -329,7 +348,7 @@ describe('POST /library/books/:id/restore', () => {
     expect(data?.id).toBe(BOOK_ID)
     expect(data?.deleted_at).toBeNull()
     expect(vi.mocked(deps.restoreBook)).toHaveBeenCalledOnce()
-    expect(vi.mocked(deps.restoreBook)).toHaveBeenCalledWith(BOOK_ID)
+    expect(vi.mocked(deps.restoreBook)).toHaveBeenCalledWith(USER_ID, BOOK_ID)
   })
 
   it('returns 404 when restoreBook throws BookNotFoundError', async () => {
@@ -343,5 +362,23 @@ describe('POST /library/books/:id/restore', () => {
 
     expect(res.status).toBe(404)
     expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}book-not-found`)
+  })
+})
+
+describe('auth gate', () => {
+  it('returns 401 unauthorized when there is no session', async () => {
+    const anonAuth = {
+      api: { getSession: async () => null },
+    } as unknown as LibraryRouteDeps['auth']
+    const deps = makeDeps({ auth: anonAuth })
+    const app = buildApp(deps)
+
+    const res = await app.request('/library/books')
+    const body = (await res.json()) as Record<string, unknown>
+
+    expect(res.status).toBe(401)
+    expect(res.headers.get('content-type')).toBe('application/problem+json')
+    expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}unauthorized`)
+    expect(vi.mocked(deps.listLibrary)).not.toHaveBeenCalled()
   })
 })

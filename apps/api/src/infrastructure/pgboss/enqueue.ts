@@ -16,12 +16,29 @@ export class EnqueueError extends Error {
   }
 }
 
-export async function enqueue<T>(deps: EnqueueDeps, queue: string, data: T): Promise<string> {
+export interface EnqueueOptions {
+  /**
+   * Deterministic dedup key. pg-boss keeps at most one job per `singletonKey` in a
+   * non-completed state, so a deterministic key (e.g. `ingest-{bookId}`) collapses
+   * concurrent first-adds of the same book into exactly one ingestion job (FR-012).
+   */
+  singletonKey?: string
+}
+
+export async function enqueue<T>(
+  deps: EnqueueDeps,
+  queue: string,
+  data: T,
+  options?: EnqueueOptions,
+): Promise<string> {
   const factory = deps.createBoss ?? createPgBoss
   const boss = factory(deps.databaseUrl)
   await boss.start()
   try {
-    const jobId = await boss.send(queue, data as object)
+    const jobId =
+      options?.singletonKey !== undefined
+        ? await boss.send(queue, data as object, { singletonKey: options.singletonKey })
+        : await boss.send(queue, data as object)
     if (jobId == null) {
       throw new EnqueueError(queue, `pg-boss returned null jobId for queue "${queue}"`)
     }

@@ -12,6 +12,7 @@ import {
   revokeMember,
   setMemberRole,
 } from '@/lib/api/admin'
+import { DeleteMemberDialog } from './DeleteMemberDialog'
 
 function errorMessageFor(error: unknown): string {
   if (error instanceof ApiError && error.slug === 'last-admin') {
@@ -125,7 +126,7 @@ export function MembersPanel() {
                   </Button>
                 ) : (
                   <Button
-                    variant="destructive"
+                    variant="outline"
                     size="sm"
                     onClick={() => revokeMutation.mutate(member.id)}
                     disabled={busy}
@@ -133,6 +134,12 @@ export function MembersPanel() {
                     Revogar
                   </Button>
                 )}
+                <DeleteMemberDialog
+                  memberId={member.id}
+                  email={member.email}
+                  disabled={busy}
+                  onError={onMutationError}
+                />
               </div>
             </li>
           ))}

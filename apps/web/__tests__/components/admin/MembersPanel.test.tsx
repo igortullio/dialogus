@@ -9,9 +9,11 @@ vi.mock('../../../src/lib/api/admin', () => ({
   revokeMember: vi.fn(),
   restoreMember: vi.fn(),
   setMemberRole: vi.fn(),
+  deleteMember: vi.fn(),
 }))
 
 import {
+  deleteMember,
   fetchMembers,
   restoreMember,
   revokeMember,
@@ -73,6 +75,21 @@ describe('MembersPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /restaurar/i }))
 
     await waitFor(() => expect(restoreMember).toHaveBeenCalledWith('m1'))
+  })
+
+  it('deletes a member account after confirming the dialog (FR-023)', async () => {
+    vi.mocked(fetchMembers).mockResolvedValue({ members: [MEMBER], nextCursor: null })
+    vi.mocked(deleteMember).mockResolvedValue(undefined)
+
+    renderPanel()
+    await screen.findByText('m@test.local')
+
+    // Open the confirm dialog, then confirm.
+    fireEvent.click(screen.getByRole('button', { name: /^excluir$/i }))
+    const confirm = await screen.findByRole('button', { name: /excluir conta/i })
+    fireEvent.click(confirm)
+
+    await waitFor(() => expect(deleteMember).toHaveBeenCalledWith('m1'))
   })
 
   it('promotes a member to admin', async () => {

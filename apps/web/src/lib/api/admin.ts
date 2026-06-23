@@ -98,3 +98,11 @@ export function restoreMember(id: string): Promise<Member> {
 export function setMemberRole(id: string, role: 'admin' | 'member'): Promise<Member> {
   return memberAction(id, 'role', { role })
 }
+
+/** Permanently delete a member account (FR-023). */
+export async function deleteMember(id: string): Promise<void> {
+  await fetchVoid(apiBaseUrl(), `${ADMIN_BASE}/members/${id}`, {
+    method: 'DELETE',
+    where: 'deleteMember',
+  })
+}

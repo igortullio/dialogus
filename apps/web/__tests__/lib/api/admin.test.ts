@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createInvitation,
+  deleteMember,
   fetchInvitations,
   fetchMembers,
   restoreMember,
@@ -138,5 +139,15 @@ describe('admin members client', () => {
     expect(member.role).toBe('admin')
     const [, init] = fetchMock.mock.calls[0] ?? []
     expect(JSON.parse(init?.body as string)).toEqual({ role: 'admin' })
+  })
+
+  it('deletes a member account (DELETE, no body)', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }))
+
+    await deleteMember('member-1')
+
+    const [url, init] = fetchMock.mock.calls[0] ?? []
+    expect(url).toBe(`${BASE}/api/admin/members/member-1`)
+    expect(init?.method).toBe('DELETE')
   })
 })

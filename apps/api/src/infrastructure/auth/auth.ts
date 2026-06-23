@@ -31,6 +31,7 @@ export interface CreateAuthDeps {
 }
 
 const DEV_SECRET = 'dev-insecure-better-auth-secret-change-me'
+const ONE_DAY_SECONDS = 60 * 60 * 24
 
 function resolveSecret(config: DialogusEnv): string {
   if (config.BETTER_AUTH_SECRET && config.BETTER_AUTH_SECRET.length > 0) {
@@ -90,7 +91,12 @@ export function createAuth(deps: CreateAuthDeps) {
       },
     },
     session: {
+      // Sliding inactivity window (FR-018): the session lives `expiresIn`
+      // seconds from its last refresh, and a request refreshes it once the
+      // session is older than `updateAge`. An abandoned (inactive) device thus
+      // expires after `SESSION_MAX_AGE_SECONDS`; an active one stays signed in.
       expiresIn: config.SESSION_MAX_AGE_SECONDS,
+      updateAge: Math.min(config.SESSION_MAX_AGE_SECONDS, ONE_DAY_SECONDS),
     },
     rateLimit: {
       enabled: true,

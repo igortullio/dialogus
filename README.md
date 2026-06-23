@@ -34,6 +34,63 @@ dIAlogus — api: up / db: up / pgboss: up / livros: 0
 
 `docker-compose.yml` pins `pgvector/pgvector:pg18`. If the Postgres 18 image misbehaves on your machine — most likely on Apple Silicon while the multi-arch tag stabilises — fall back to Postgres 17 by editing the `image:` line to `pgvector/pgvector:pg17`, then `docker compose down -v && docker compose up -d`. Both tags ship pgvector ≥ 0.8.0, so migrations and the embedding pipeline behave identically. The fallback is recorded in [ADR-001](./.compozy/tasks/000-foundation/adrs/adr-001.md).
 
+## Multi-user auth & onboarding (feature 001)
+
+dIAlogus is **invite-only multi-user**: every person signs in and gets a private
+workspace (conversations + library + preferences) isolated from everyone else,
+over one shared public-domain reading corpus. Auth is [Better Auth](https://better-auth.com)
+(email + password, DB-backed sessions, admin roles + ban/revoke, DB rate limiting)
+mounted on the Hono API at `/api/auth/*`. Design rationale lives in
+[`specs/001-multi-user-auth/adrs/`](./specs/001-multi-user-auth/adrs/).
+
+### First-run setup
+
+The auth/email env vars are in `.env.example` under **Auth** and **Email**; all
+have dev-safe defaults except production secrets:
+
+- `BETTER_AUTH_SECRET` — required in production (`openssl rand -base64 32`); a
+  throwaway dev default is used if unset.
+- `EMAIL_PROVIDER` — `mock` (default; **logs** the invite/reset link to the API
+  log instead of sending) or `resend` (needs `RESEND_API_KEY` + `EMAIL_FROM`).
+  `resend` is required when `NODE_ENV=production`.
+- `APP_URL` — public web base URL used to build invite/reset links and as a
+  trusted origin. `MASTRA_AUTH_SECRET` gates the internal web→Mastra proxy.
+- `SESSION_MAX_AGE_SECONDS` — sliding inactivity window (default 7 days).
+
+### Seed the first owner (admin)
+
+Invite-only blocks self-service sign-up, so the first administrator is created
+out-of-band:
+
+```bash
+pnpm --filter @dialogus/api seed:owner -- --email you@example.com --password 'StrongPass123!'
+```
+
+That owner can then sign in at `/sign-in` and open the admin console at `/admin`
+to **invite** people by email (single-use, expiring links), list/revoke
+invitations, and manage members (revoke = ban + session kill, restore, change
+role, delete account). Invited users open the emailed `/accept-invite?invitation=…`
+link, set a name + password, and land in their workspace. Account recovery is at
+`/reset-password` (request a link → set a new password). With `EMAIL_PROVIDER=mock`,
+scrape the invite/reset link from the API log.
+
+### Deployment model
+
+The recommended production topology is **single-origin**: serve web + API under
+one origin behind a reverse proxy (e.g. `app.example.com` + `app.example.com/api`),
+which lets `SameSite=Lax; Secure; HttpOnly` session cookies ride same-origin
+requests. The documented fallback keeps the cross-origin dev topology (web :3000 ↔
+API :3001) and requires `SameSite=None; Secure` cookies + explicit-origin
+credentialed CORS — see the cookie note in `apps/api/src/infrastructure/auth/auth.ts`.
+
+### Auth & admin error slugs
+
+App endpoints return RFC 9457 `application/problem+json`
+(`urn:dialogus:problems:<slug>`): `unauthorized` (401), `forbidden` (403),
+`rate-limited` (429), `invitation-invalid` (410), `invitation-conflict` (409),
+`last-admin` (409), `member-not-found` (404). The `/api/auth/*` group is exempt
+and returns Better Auth's native JSON errors ([ADR-002](./specs/001-multi-user-auth/adrs/adr-002-auth-error-exemption.md)).
+
 ## Architecture
 
 dIAlogus is a single-user, locally-runnable study companion that grounds conversations about books in the public domain. The product surface is a Next.js 16 web app that talks to a Hono 4 API, which delegates persistence and search to a single Postgres 18 database with the `pgvector` and `uuid-ossp` extensions. Foundation (this commit) ships only the scaffolding — the catalog, ingestion pipeline, RAG agent, and chat UI arrive in features 001 through 004.

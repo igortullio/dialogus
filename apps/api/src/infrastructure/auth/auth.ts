@@ -104,10 +104,22 @@ export function createAuth(deps: CreateAuthDeps) {
       window: 60,
       max: 100,
       customRules: {
+        // Sign-in back-off (FR-021).
         '/sign-in/email': { window: 60, max: config.AUTH_RATE_LIMIT_SIGNIN_MAX },
+        // Account-recovery abuse (FR-019/FR-021): cap reset-link requests and
+        // reset-confirm attempts so the flow can't be spammed or brute-forced.
+        '/request-password-reset': { window: 3600, max: 5 },
+        '/reset-password': { window: 3600, max: 10 },
       },
     },
     advanced: {
+      // Single-origin deployment (the recommended prod model): web + API are
+      // served under one origin behind a reverse proxy, so `SameSite=Lax` cookies
+      // are sent on same-origin XHR. `Secure` is on in production (HTTPS); always
+      // `HttpOnly`. The documented cross-origin fallback (web :3000 ↔ API :3001)
+      // instead needs `SameSite=None; Secure` so credentialed cross-site fetches
+      // carry the cookie — flip this here (and keep the explicit-origin CORS in
+      // `index.ts`) if you deploy split-origin. See README → Deployment.
       defaultCookieAttributes: {
         sameSite: 'lax',
         secure: config.NODE_ENV === 'production',

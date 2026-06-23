@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server'
-import { mastraAgentId, mastraThreadsUrl, relay, requireUserId } from '@/lib/server/mastra-proxy'
+import {
+  mastraAgentId,
+  mastraFetch,
+  mastraThreadsUrl,
+  relay,
+  requireUserId,
+} from '@/lib/server/mastra-proxy'
 
 /**
  * List the authenticated user's threads. resourceId is injected server-side
@@ -10,5 +16,5 @@ export async function GET(): Promise<Response> {
   const userId = await requireUserId()
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const url = `${mastraThreadsUrl}?resourceId=${encodeURIComponent(userId)}&agentId=${mastraAgentId}`
-  return relay(await fetch(url, { cache: 'no-store' }))
+  return relay(await mastraFetch(url, { cache: 'no-store' }))
 }

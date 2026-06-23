@@ -8,9 +8,20 @@ import { getServerSession } from '@/lib/auth-session'
 // reachable); Mastra server.auth is a defense-in-depth follow-up (T018).
 const MASTRA = process.env.NEXT_PUBLIC_MASTRA_URL ?? 'http://localhost:4111'
 const AGENT = 'dialogusAgent'
+// Server-only shared secret. When set, Mastra's server middleware rejects any
+// request that doesn't carry it (defense-in-depth, T018), so only these
+// server-side proxies can reach Mastra. Unset in dev → no enforcement.
+const MASTRA_AUTH_SECRET = process.env.MASTRA_AUTH_SECRET
 
 export const mastraThreadsUrl = `${MASTRA}/api/memory/threads`
 export const mastraAgentId = AGENT
+
+/** fetch to Mastra with the internal auth header attached when configured. */
+export function mastraFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers)
+  if (MASTRA_AUTH_SECRET) headers.set('Authorization', `Bearer ${MASTRA_AUTH_SECRET}`)
+  return fetch(url, { ...init, headers })
+}
 
 /** The authenticated user's id, or null when unauthenticated. */
 export async function requireUserId(): Promise<string | null> {
@@ -20,9 +31,10 @@ export async function requireUserId(): Promise<string | null> {
 
 /** The `resourceId` (owner) of a Mastra thread, or null if missing/error. */
 async function threadOwner(threadId: string): Promise<string | null> {
-  const res = await fetch(`${mastraThreadsUrl}/${encodeURIComponent(threadId)}?agentId=${AGENT}`, {
-    cache: 'no-store',
-  })
+  const res = await mastraFetch(
+    `${mastraThreadsUrl}/${encodeURIComponent(threadId)}?agentId=${AGENT}`,
+    { cache: 'no-store' },
+  )
   if (!res.ok) return null
   const data = (await res.json().catch(() => null)) as { resourceId?: unknown } | null
   return data && typeof data.resourceId === 'string' ? data.resourceId : null

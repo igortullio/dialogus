@@ -143,11 +143,17 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const mastraStream = `${mastraBaseUrl()}/api/agents/dialogusAgent/stream`
 
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  // Forward the internal Mastra secret when configured (T018 defense-in-depth).
+  if (process.env.MASTRA_AUTH_SECRET) {
+    headers.Authorization = `Bearer ${process.env.MASTRA_AUTH_SECRET}`
+  }
+
   let mastraRes: Response
   try {
     mastraRes = await fetch(mastraStream, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(mastraBody),
     })
   } catch {

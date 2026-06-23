@@ -1,5 +1,11 @@
 import type { NextRequest } from 'next/server'
-import { authorizeThread, mastraAgentId, mastraThreadsUrl, relay } from '@/lib/server/mastra-proxy'
+import {
+  authorizeThread,
+  mastraAgentId,
+  mastraFetch,
+  mastraThreadsUrl,
+  relay,
+} from '@/lib/server/mastra-proxy'
 
 interface Ctx {
   params: Promise<{ threadId: string }>
@@ -11,5 +17,5 @@ export async function GET(_req: NextRequest, ctx: Ctx): Promise<Response> {
   const auth = await authorizeThread(threadId)
   if (auth instanceof Response) return auth
   const url = `${mastraThreadsUrl}/${encodeURIComponent(threadId)}/messages?agentId=${mastraAgentId}`
-  return relay(await fetch(url, { cache: 'no-store' }))
+  return relay(await mastraFetch(url, { cache: 'no-store' }))
 }

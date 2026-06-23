@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
+import { signIn } from '../helpers/auth'
 
 const BRAS_CUBAS_GUTENDEX_ID = 54829
 const INGEST_TIMEOUT_MS = 10 * 60 * 1000
@@ -91,7 +92,8 @@ async function readSpoilerCapKeysForThread(page: Page, threadId: string): Promis
 
 test.describe('Feature 004 — chat-first happy path', () => {
   test('search → ingest → ask → spoiler-safe read → rename → pin → delete', async ({ page }) => {
-    await page.goto('/')
+    // Auth gate (FR-001): sign in before the workspace is reachable.
+    await signIn(page)
 
     await test.step('1. Land on / and see Primeiros passos', async () => {
       const card = page.locator('[data-slot="empty-state-card"][data-state="onboarding"]')

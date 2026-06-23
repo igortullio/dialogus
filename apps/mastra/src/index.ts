@@ -118,10 +118,27 @@ export function buildMastra(options: BuildMastraOptions = {}): BuildMastraResult
     'agent model selected',
   )
 
+  // Defense-in-depth (T018): when MASTRA_AUTH_SECRET is configured, reject any
+  // API request that doesn't carry it, so only the web's server-side proxies
+  // (which forward it) can reach Mastra. Unset → passthrough (dev / Studio).
+  const authSecret = env.MASTRA_AUTH_SECRET
   const mastra = new Mastra({
     storage,
     agents: { [DIALOGUS_AGENT_ID]: dialogusAgent },
-    server: { port: env.MASTRA_PORT },
+    server: {
+      port: env.MASTRA_PORT,
+      middleware: [
+        {
+          handler: async (c, next) => {
+            if (authSecret && c.req.header('Authorization') !== `Bearer ${authSecret}`) {
+              return new Response('Unauthorized', { status: 401 })
+            }
+            await next()
+          },
+          path: '/api/*',
+        },
+      ],
+    },
   })
 
   return { mastra, env, logger }

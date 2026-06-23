@@ -13,6 +13,8 @@ export type { LighthouseAuditResult, LighthouseFailingAudit }
 
 export interface LighthouseRunOptions {
   readonly url: string
+  /** Optional `Cookie` header so gated routes can be audited as a signed-in user. */
+  readonly cookie?: string
 }
 
 interface LighthouseRunnerResult {
@@ -28,7 +30,12 @@ export async function runLighthouseA11y(
   const chrome = await launchChromeForLighthouse()
   try {
     const config = A11Y_LIGHTHOUSE_CONFIG as unknown as Parameters<typeof lighthouse>[2]
-    const flags = { port: chrome.port, output: 'json' as const, logLevel: 'error' as const }
+    const flags = {
+      port: chrome.port,
+      output: 'json' as const,
+      logLevel: 'error' as const,
+      ...(options.cookie ? { extraHeaders: { Cookie: options.cookie } } : {}),
+    }
     const result = (await lighthouse(options.url, flags, config)) as
       | LighthouseRunnerResult
       | undefined

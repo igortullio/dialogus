@@ -148,17 +148,17 @@ before implementation.
 
 ### Tests for User Story 4 (per Constitution Principle II) ⚠️
 
-- [ ] T049 [P] [US4] Integration test: session inactivity/max-age expiry, password-reset single-use + expiring token, and independent multi-device sessions in `apps/api/src/infrastructure/auth/session-lifecycle.integration.test.ts`.
-- [ ] T050 [P] [US4] E2E (Playwright + axe): forgot → reset-password journey using the mock email link scraped from logs in `apps/web/__tests__/e2e/password-reset.spec.ts`.
+- [x] T049 [P] [US4] Integration test (Testcontainers) in `apps/api/__tests__/integration/session-lifecycle.integration.test.ts` (placed alongside the other integration suites, not under `src/`): independent multi-device sessions + single-device sign-out (FR-020), expired-session rejection via `getSession` (FR-018), and single-use/expiring password reset — request → reset → new password works, old + replayed + expired token all fail (FR-019). Reset token scraped from the `sendResetPassword` email link (`${baseURL}/reset-password/<token>?callbackURL=…`).
+- [x] T050 [P] [US4] E2E (Playwright + axe) in `apps/web/__tests__/integration/password-reset.spec.ts` (the `integration` Playwright project, per the T028 precedent — no separate `e2e` project): forgot-password link, request confirmation (neutral, no existence leak), invalid-link state, `/reset-password` axe, and two-context multi-device sign-out (FR-020). Typecheck-validated; the full token round-trip is executed in CI where the mock-email link is scraped from API logs.
 
 ### Implementation for User Story 4
 
-- [ ] T051 [US4] Configure session inactivity + `SESSION_MAX_AGE_SECONDS` expiry on the Better Auth instance in `apps/api/src/infrastructure/auth/auth.ts`.
-- [ ] T052 [US4] Implement password reset: `sendResetPassword` via the email port, the request-reset page `apps/web/src/app/(auth)/reset-password/page.tsx`, and a reset-confirm view calling `resetPassword({ token, newPassword })`.
-- [ ] T053 [US4] Add session-expiry UX in `apps/web` (redirect to `/sign-in` preserving the return path; re-authenticate without losing the workspace context the user returns to) in `apps/web/src/middleware.ts` + the auth client.
-- [ ] T054 [US4] Verify and cover multi-device behavior (signing out one device leaves others working) in `apps/web/src/lib/auth-client.ts` (with `T049` integration support).
+- [x] T051 [US4] Configured `session.updateAge` (sliding inactivity refresh) alongside `expiresIn = SESSION_MAX_AGE_SECONDS` in `apps/api/src/infrastructure/auth/auth.ts` (FR-018): an inactive device expires after the max age, an active one stays signed in. (A separate absolute-max-age cap regardless of activity is a possible future addition; the `and/or` in FR-018 is satisfied by the inactivity window.)
+- [x] T052 [US4] Implemented the password-reset web flow: `apps/web/src/app/(auth)/reset-password/page.tsx` (+ `ResetPasswordForm`) is one page, two modes — request (`requestPasswordReset({ email, redirectTo })`) and confirm (`resetPassword({ token, newPassword })`) — plus a consumed/expired `?error=INVALID_TOKEN` state; forgot-password link added to the sign-in page. Server `sendResetPassword` (email port) was already wired in Foundational.
+- [x] T053 [US4] Session-expiry UX is the route gate (`apps/web/src/proxy.ts` — Next 16's `middleware`→`proxy` rename): unauthenticated → `/sign-in?redirect=<path>` (return path preserved). Extended the matcher to also exclude `reset-password` + `accept-invite` so unauthenticated recovery/onboarding pages are reachable (the `accept-invite` exclusion fixes a latent US3 redirect-to-sign-in bug).
+- [x] T054 [US4] Multi-device verified: Better Auth `signOut` ends only the current session (independent `session` rows, FR-020). Covered server-side by the T049 integration test (sign out device A → device B still valid) and in the T050 E2E (two browser contexts).
 
-**Checkpoint**: All four user stories independently functional.
+**Checkpoint**: All four user stories independently functional. ✅
 
 ---
 

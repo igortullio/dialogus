@@ -91,9 +91,16 @@ never run Better Auth's own migrate.
 Then read `HANDOFF.md` + `tasks.md` (Phase 5) + `contracts/admin-invitations.md` + `data-model.md` and proceed.
 
 ### Status snapshot (for the resuming session)
-Foundational (T001–T015) ✅ · US1 (T016–T025) ✅ · **US2 (T026–T039) ✅** · **US3 (T040–T048) ✅ complete**
-(commits `bcf462e` allowlist+services+hooks domain, `c69970f` admin/accept routes + problem slugs,
-`4ec46b8` accept-invite page + admin console). US4 (T049–T054) ⬜ · Polish (T055–T062) ⬜.
+Foundational (T001–T015) ✅ · US1 (T016–T025) ✅ · **US2 (T026–T039) ✅** · **US3 (T040–T048) ✅** · **US4 (T049–T054) ✅ complete**
+(US3: `bcf462e` allowlist+services+hooks, `c69970f` admin/accept routes, `4ec46b8` accept-invite+admin UI, `5a67eb2` review remediation.
+US4: `96e7ae4` session lifecycle + sliding inactivity, `fbd0f13` reset-password flow + proxy exclusions). Polish (T055–T062) ⬜.
+
+#### US4 notes for the next session
+- **Reset URL shape**: Better Auth emails `${baseURL}/reset-password/<token>?callbackURL=<redirectTo>` (token is a PATH segment). Clicking it hits Better Auth's GET endpoint, which redirects to `<redirectTo>?token=<token>` (or `?error=INVALID_TOKEN`). The web `reset-password` page reads `?token=`/`?error=`. The integration test scrapes the path token directly.
+- **Session model**: sliding inactivity via `session.expiresIn` (= `SESSION_MAX_AGE_SECONDS`) + `updateAge` (refresh granularity, capped at 1 day). There is **no** separate absolute-max-age-regardless-of-activity cap — add one if the spec later demands it.
+- **Route gate** (`apps/web/src/proxy.ts`) excludes `sign-in`, `reset-password`, `accept-invite`, `api`, Next internals. Adding any new public (signed-out) page means adding it to that matcher.
+- **Reset is NOT yet rate-limited** beyond Better Auth's global `rateLimit` (100/60s); the `customRules` only tighten `/sign-in/email`. FR-021 polish (T058/Polish) should add tighter `customRules` for `/request-password-reset` and the accept endpoint.
+- Run: `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @dialogus/api test:integration session-lifecycle` (no MSW).
 
 #### US3 notes for the next session
 - **Migration is `0010_invitations_and_security_events`** (not `0011` — US2 consolidated into `0009`). data-model §6 still says 0011; it's `0010`.

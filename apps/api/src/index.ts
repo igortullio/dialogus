@@ -20,6 +20,7 @@ import { createAuthRoute } from './infrastructure/http/routes/auth'
 import { createCatalogRoute } from './infrastructure/http/routes/catalog'
 import { createHealthRoute } from './infrastructure/http/routes/health'
 import { createLibraryRoute } from './infrastructure/http/routes/library'
+import { createPreferencesRoute } from './infrastructure/http/routes/preferences'
 
 const SHUTDOWN_TIMEOUT_MS = 10_000
 
@@ -197,6 +198,7 @@ export async function main(): Promise<void> {
       removeBook: (userId, id) => removeBook({ libraryRepo }, userId, id),
       restoreBook: (userId, id) => restoreBook({ repository, libraryRepo }, userId, id),
     })
+    const preferencesApp = createPreferencesRoute({ db, auth, libraryRepo })
 
     const boot = await start({
       db,
@@ -205,6 +207,7 @@ export async function main(): Promise<void> {
         { prefix: '/api/auth', app: authApp },
         { prefix: '/api/catalog', app: catalogApp },
         { prefix: '/api/library', app: libraryApp },
+        { prefix: '/api/preferences', app: preferencesApp },
       ],
     })
     attachSignalHandlers(boot)

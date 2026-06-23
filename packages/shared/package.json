@@ -20,6 +20,7 @@
     "./schemas/health": "./src/schemas/health.ts",
     "./schemas/ingestion": "./src/schemas/ingestion.ts",
     "./schemas/library": "./src/schemas/library.ts",
+    "./schemas/preferences": "./src/schemas/preferences.ts",
     "./schemas/thread": "./src/schemas/thread.ts"
   },
   "scripts": {

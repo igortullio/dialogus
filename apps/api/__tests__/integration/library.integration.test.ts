@@ -225,5 +225,34 @@ describe.skipIf(!dockerAvailable)(
       expect(res.status).toBe(404)
       expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}book-not-found`)
     })
+
+    it('FR-022: a shared book with no membership never surfaces to the user', async () => {
+      // A leftover single-user title (or another user's book) exists in the shared
+      // corpus with NO library_entries row for this user. No code path lists books
+      // globally, so it must be invisible — not in the list (even include_deleted)
+      // and book-not-found by id.
+      const [row] = await db
+        .insert(books)
+        .values({
+          gutendexId: 765432,
+          title: 'Orphaned Title',
+          authors: [{ name: 'Nobody', birthYear: null, deathYear: null }],
+          languages: ['en'],
+          subjects: [],
+          ingestionStatus: 'ready',
+        })
+        .returning({ id: books.id })
+      const orphanId = (row as { id: string }).id
+
+      const listRes = await app.request('/api/library/books?include_deleted=true')
+      const listBody = (await listRes.json()) as Record<string, unknown>
+      expect(listRes.status).toBe(200)
+      expect((listBody.data as unknown[]).length).toBe(0)
+
+      const getRes = await app.request(`/api/library/books/${orphanId}`)
+      const getBody = (await getRes.json()) as Record<string, unknown>
+      expect(getRes.status).toBe(404)
+      expect(getBody.type).toBe(`${PROBLEM_TYPE_PREFIX}book-not-found`)
+    })
   },
 )

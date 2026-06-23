@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { type FormEvent, Suspense, useEffect, useId, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -80,6 +81,12 @@ function SignInForm() {
           <Button type="submit" disabled={pending}>
             {pending ? 'Entrando…' : 'Entrar'}
           </Button>
+          <Link
+            href="/reset-password"
+            className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+          >
+            Esqueci minha senha
+          </Link>
         </form>
       </CardContent>
     </Card>

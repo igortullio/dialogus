@@ -10,6 +10,8 @@ import {
   revokeInvitation,
 } from '../../../application/admin/invitations'
 import {
+  type DeleteAccountDeps,
+  deleteAccount,
   listMembers,
   type MembersDeps,
   restoreMember,
@@ -21,6 +23,7 @@ import type {
   InvitationRecord,
   InvitationStatus,
   MemberRecord,
+  UserThreadDeleter,
 } from '../../../application/admin/ports'
 import type { Auth } from '../../auth/auth'
 import type { EmailProvider } from '../../email'
@@ -31,6 +34,7 @@ export interface AdminRouteDeps {
   readonly repo: AdminRepository
   readonly email: EmailProvider
   readonly appUrl: string
+  readonly threads: UserThreadDeleter
 }
 
 const invitationStatusEnum = z.enum(['pending', 'used', 'expired', 'revoked'])
@@ -116,6 +120,7 @@ export function createAdminRoute(deps: AdminRouteDeps): Hono {
     appUrl: deps.appUrl,
   }
   const membersDeps: MembersDeps = { repo: deps.repo }
+  const deleteDeps: DeleteAccountDeps = { repo: deps.repo, threads: deps.threads }
 
   app.post('/invitations', async (c) => {
     const invitedBy = userIdOf(c)
@@ -183,6 +188,12 @@ export function createAdminRoute(deps: AdminRouteDeps): Hono {
     const { role } = setRoleRequestSchema.parse(await c.req.json())
     const member = await setMemberRole(membersDeps, id, role)
     return c.json(envelope(toMemberDto(member)), 200)
+  })
+
+  app.delete('/members/:id', async (c) => {
+    const { id } = memberIdParamSchema.parse(c.req.param())
+    await deleteAccount(deleteDeps, id)
+    return new Response(null, { status: 204 })
   })
 
   return app as unknown as Hono

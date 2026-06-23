@@ -24,6 +24,7 @@ import { createHealthRoute } from './infrastructure/http/routes/health'
 import { createInvitationsRoute } from './infrastructure/http/routes/invitations'
 import { createLibraryRoute } from './infrastructure/http/routes/library'
 import { createPreferencesRoute } from './infrastructure/http/routes/preferences'
+import { MastraThreadDeleter } from './infrastructure/mastra/MastraThreadDeleter'
 import { DrizzleAdminRepository } from './infrastructure/persistence/DrizzleAdminRepository'
 
 const SHUTDOWN_TIMEOUT_MS = 10_000
@@ -209,6 +210,11 @@ export async function main(): Promise<void> {
       repo: adminRepo,
       email: email.provider,
       appUrl: config.APP_URL,
+      threads: new MastraThreadDeleter({
+        baseUrl: config.NEXT_PUBLIC_MASTRA_URL,
+        agentId: 'dialogusAgent',
+        ...(config.MASTRA_AUTH_SECRET ? { authSecret: config.MASTRA_AUTH_SECRET } : {}),
+      }),
     })
     const invitationsApp = createInvitationsRoute({
       repo: adminRepo,

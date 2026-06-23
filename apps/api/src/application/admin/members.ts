@@ -1,5 +1,11 @@
 import { LastAdminError, MemberNotFoundError } from './errors'
-import type { AdminRepository, CursorPage, ListMembersInput, MemberRecord } from './ports'
+import type {
+  AdminRepository,
+  CursorPage,
+  ListMembersInput,
+  MemberRecord,
+  UserThreadDeleter,
+} from './ports'
 
 export interface MembersDeps {
   readonly repo: AdminRepository
@@ -73,4 +79,25 @@ export async function setMemberRole(
   const target = await requireMember(deps, userId)
   if (role === 'member') await assertNotLastAdmin(deps, target)
   return deps.repo.setMemberRole(userId, role)
+}
+
+export interface DeleteAccountDeps {
+  readonly repo: AdminRepository
+  readonly threads: UserThreadDeleter
+}
+
+/**
+ * Permanently delete an account (FR-023). Refuses to delete the only admin
+ * (FR-017). Framework-owned Mastra threads are removed first (no DB cascade,
+ * deviation E2), then the user row — whose FKs cascade the app-owned per-user
+ * data (`session`/`account`/`library_entries`/`user_book_preferences`) and SET
+ * NULL the audit (`security_events`) + `invitations` references. The shared
+ * corpus and other users are never touched.
+ */
+export async function deleteAccount(deps: DeleteAccountDeps, userId: string): Promise<void> {
+  const target = await requireMember({ repo: deps.repo }, userId)
+  await assertNotLastAdmin({ repo: deps.repo }, target)
+
+  await deps.threads.deleteThreadsForUser(userId)
+  await deps.repo.deleteUser(userId)
 }

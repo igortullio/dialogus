@@ -24,6 +24,11 @@ function recordingEmail() {
   }
 }
 
+function noopThreads() {
+  const deleted: string[] = []
+  return { deleted, deleteThreadsForUser: async (id: string) => void deleted.push(id) }
+}
+
 function buildApp(
   repo: ReturnType<typeof fakeAdminRepo>,
   overrides: Partial<AdminRouteDeps> = {},
@@ -37,6 +42,7 @@ function buildApp(
       repo,
       email: recordingEmail().provider,
       appUrl: 'https://app.test',
+      threads: noopThreads(),
       ...overrides,
     }),
   )
@@ -261,6 +267,31 @@ describe('member access control', () => {
 
     expect(res.status).toBe(404)
     expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}member-not-found`)
+  })
+
+  it('deletes a member account (204) — threads removed + user deleted (FR-023)', async () => {
+    const repo = fakeAdminRepo({
+      members: [makeMember({ id: ADMIN_ID, role: 'admin' }), makeMember({ id: 'm1' })],
+    })
+    const threads = noopThreads()
+    const app = buildApp(repo, { threads })
+
+    const res = await app.request('/admin/members/m1', { method: 'DELETE' })
+
+    expect(res.status).toBe(204)
+    expect(threads.deleted).toContain('m1')
+    expect(repo.state.deletedUsers).toContain('m1')
+  })
+
+  it('returns 409 last-admin when deleting the only admin', async () => {
+    const repo = fakeAdminRepo({ members: [makeMember({ id: ADMIN_ID, role: 'admin' })] })
+    const app = buildApp(repo)
+
+    const res = await app.request(`/admin/members/${ADMIN_ID}`, { method: 'DELETE' })
+    const body = (await res.json()) as Record<string, unknown>
+
+    expect(res.status).toBe(409)
+    expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}last-admin`)
   })
 })
 

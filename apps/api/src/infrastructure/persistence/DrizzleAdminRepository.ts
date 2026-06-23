@@ -241,6 +241,12 @@ export class DrizzleAdminRepository implements AdminRepository {
     await this.db.delete(session).where(eq(session.userId, userId))
   }
 
+  async deleteUser(userId: string): Promise<void> {
+    // FKs cascade session/account/library_entries/user_book_preferences and
+    // SET NULL security_events/invitations; the shared corpus is untouched.
+    await this.db.delete(user).where(eq(user.id, userId))
+  }
+
   async recordSecurityEvent(event: SecurityEventInput): Promise<void> {
     await this.db.insert(securityEvents).values({
       eventType: event.eventType,

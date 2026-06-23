@@ -15,6 +15,7 @@ export interface FakeAdminState {
   invitations: InvitationRecord[]
   members: MemberRecord[]
   deletedSessionsFor: string[]
+  deletedUsers: string[]
   events: SecurityEventInput[]
 }
 
@@ -43,6 +44,7 @@ export function fakeAdminRepo(
     invitations: [...(seed.invitations ?? [])],
     members: [...(seed.members ?? [])],
     deletedSessionsFor: [],
+    deletedUsers: [],
     events: [],
   }
 
@@ -155,6 +157,11 @@ export function fakeAdminRepo(
 
     async deleteUserSessions(userId) {
       state.deletedSessionsFor.push(userId)
+    },
+
+    async deleteUser(userId) {
+      state.deletedUsers.push(userId)
+      state.members = state.members.filter((m) => m.id !== userId)
     },
 
     async recordSecurityEvent(event) {

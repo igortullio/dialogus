@@ -103,6 +103,22 @@ export interface AdminRepository {
   setMemberRole(id: string, role: string): Promise<MemberRecord>
   /** Revocation invalidates every active session for the user (FR-015, SC-007). */
   deleteUserSessions(userId: string): Promise<void>
+  /**
+   * Delete the user row (FR-023). DB FKs cascade `session`/`account`/
+   * `library_entries`/`user_book_preferences` and SET NULL the audit
+   * (`security_events`) + `invitations` back-references; the shared corpus is
+   * untouched.
+   */
+  deleteUser(userId: string): Promise<void>
 
   recordSecurityEvent(event: SecurityEventInput): Promise<void>
+}
+
+/**
+ * Deletes a user's Mastra conversation threads by `resourceId`. Mastra tables
+ * are framework-owned and not FK-linked (deviation E2), so account deletion
+ * removes them through Mastra's API rather than a DB cascade.
+ */
+export interface UserThreadDeleter {
+  deleteThreadsForUser(userId: string): Promise<void>
 }

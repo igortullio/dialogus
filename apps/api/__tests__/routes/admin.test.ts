@@ -283,15 +283,38 @@ describe('member access control', () => {
     expect(repo.state.deletedUsers).toContain('m1')
   })
 
-  it('returns 409 last-admin when deleting the only admin', async () => {
-    const repo = fakeAdminRepo({ members: [makeMember({ id: ADMIN_ID, role: 'admin' })] })
+  it('returns 409 last-admin when deleting the only admin (a different one than the actor)', async () => {
+    // The sole admin in the table is `sole-admin`; the acting admin is ADMIN_ID,
+    // so this reaches the last-admin guard rather than the self-delete guard.
+    const repo = fakeAdminRepo({ members: [makeMember({ id: 'sole-admin', role: 'admin' })] })
     const app = buildApp(repo)
 
-    const res = await app.request(`/admin/members/${ADMIN_ID}`, { method: 'DELETE' })
+    const res = await app.request('/admin/members/sole-admin', { method: 'DELETE' })
     const body = (await res.json()) as Record<string, unknown>
 
     expect(res.status).toBe(409)
     expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}last-admin`)
+  })
+
+  it('refuses self-deletion from the admin console (403 forbidden)', async () => {
+    const repo = fakeAdminRepo({
+      members: [
+        makeMember({ id: ADMIN_ID, role: 'admin' }),
+        makeMember({ id: 'admin-2', role: 'admin' }),
+      ],
+    })
+    const threads = noopThreads()
+    const app = buildApp(repo, { threads })
+
+    // ADMIN_ID is the authenticated actor (fakeAuth) — deleting itself is refused
+    // even though a second admin means the last-admin guard wouldn't trip.
+    const res = await app.request(`/admin/members/${ADMIN_ID}`, { method: 'DELETE' })
+    const body = (await res.json()) as Record<string, unknown>
+
+    expect(res.status).toBe(403)
+    expect(body.type).toBe(`${PROBLEM_TYPE_PREFIX}forbidden`)
+    expect(threads.deleted).toHaveLength(0)
+    expect(repo.state.deletedUsers).toHaveLength(0)
   })
 })
 

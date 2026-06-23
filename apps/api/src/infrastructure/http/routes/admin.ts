@@ -1,4 +1,4 @@
-import { UnauthorizedError } from '@dialogus/shared/errors'
+import { ForbiddenError, UnauthorizedError } from '@dialogus/shared/errors'
 import { decodeCursor, encodeCursor } from '@dialogus/shared/http/cursor'
 import { envelope } from '@dialogus/shared/http/envelope'
 import { type Context, Hono } from 'hono'
@@ -191,7 +191,14 @@ export function createAdminRoute(deps: AdminRouteDeps): Hono {
   })
 
   app.delete('/members/:id', async (c) => {
+    const actorId = userIdOf(c)
     const { id } = memberIdParamSchema.parse(c.req.param())
+    // Guard against self-erasure from the admin console (a destructive footgun
+    // distinct from the last-admin safeguard). Self-service deletion, if ever
+    // wanted, belongs in a dedicated account-settings flow.
+    if (id === actorId) {
+      throw new ForbiddenError('You cannot delete your own account from the admin console')
+    }
     await deleteAccount(deleteDeps, id)
     return new Response(null, { status: 204 })
   })

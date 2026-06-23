@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import {
+  account,
   books,
+  invitations,
   libraryEntries,
   securityEvents,
   session as sessionTable,
@@ -47,9 +49,11 @@ describe.skipIf(!dockerAvailable)('account deletion cascade (FR-023, Testcontain
 
   beforeEach(async () => {
     await pg.db.delete(securityEvents)
+    await pg.db.delete(invitations)
     await pg.db.delete(userBookPreferences)
     await pg.db.delete(libraryEntries)
     await pg.db.delete(sessionTable)
+    await pg.db.delete(account)
     await pg.db.delete(books)
     await pg.db.delete(userTable)
   })
@@ -80,10 +84,28 @@ describe.skipIf(!dockerAvailable)('account deletion cascade (FR-023, Testcontain
         expiresAt: new Date(Date.now() + 3_600_000),
       },
     ])
-    // An audit row for A that must survive (anonymized), not be deleted.
+    // A credential account (cascades) + an audit row and an invitation A sent
+    // (both must SURVIVE with the user link anonymized to NULL, not be deleted).
+    await pg.db.insert(account).values({
+      id: `acc-${randomUUID()}`,
+      userId: userA,
+      accountId: userA,
+      providerId: 'credential',
+      password: 'hashed',
+    })
     await pg.db
       .insert(securityEvents)
       .values({ userId: userA, email: 'a@test.local', eventType: 'sign_in' })
+    const [invite] = await pg.db
+      .insert(invitations)
+      .values({
+        email: 'invited-by-a@test.local',
+        invitedBy: userA,
+        status: 'pending',
+        expiresAt: new Date(Date.now() + 3_600_000),
+      })
+      .returning()
+    if (!invite) throw new Error('failed to insert invitation')
 
     const threads = fakeThreads()
     await deleteAccount({ repo, threads }, userA)
@@ -102,12 +124,22 @@ describe.skipIf(!dockerAvailable)('account deletion cascade (FR-023, Testcontain
     expect(
       await pg.db.select().from(sessionTable).where(eq(sessionTable.userId, userA)),
     ).toHaveLength(0)
+    // A's credential account cascaded away.
+    expect(await pg.db.select().from(account).where(eq(account.userId, userA))).toHaveLength(0)
 
     // A's audit row is anonymized (kept, user_id → NULL), not deleted.
     const events = await pg.db.select().from(securityEvents)
     expect(events).toHaveLength(1)
     expect(events[0]?.userId).toBeNull()
     expect(events[0]?.email).toBe('a@test.local')
+
+    // The invitation A sent survives with invited_by anonymized to NULL.
+    const survivingInvite = await pg.db
+      .select()
+      .from(invitations)
+      .where(eq(invitations.id, invite.id))
+    expect(survivingInvite).toHaveLength(1)
+    expect(survivingInvite[0]?.invitedBy).toBeNull()
 
     // The shared book survives; B keeps everything.
     expect(await pg.db.select().from(books).where(eq(books.id, bookId))).toHaveLength(1)

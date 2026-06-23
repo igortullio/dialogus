@@ -14,11 +14,20 @@ interface MastraThread {
   readonly id?: unknown
 }
 
+/** Mastra's `GET /api/memory/threads` page: `{ threads, hasMore, ... }`. */
+interface MastraThreadPage {
+  readonly threads?: unknown
+  readonly hasMore?: unknown
+}
+
+const PER_PAGE = 100
+
 /**
  * Deletes a user's Mastra conversation threads by `resourceId` via Mastra's
  * memory HTTP API (account deletion, FR-023). Mastra tables are framework-owned
  * and not FK-linked to the app schema (deviation E2), so they cannot be cleaned
- * up by a DB cascade — this lists the user's threads then deletes each.
+ * up by a DB cascade — this lists the user's threads (paginated) then deletes
+ * each.
  */
 export class MastraThreadDeleter implements UserThreadDeleter {
   private readonly threadsUrl: string
@@ -44,17 +53,42 @@ export class MastraThreadDeleter implements UserThreadDeleter {
     return headers
   }
 
+  /** All of the user's thread ids, following Mastra's `hasMore` pagination. */
   private async listThreadIds(userId: string): Promise<string[]> {
-    const url = `${this.threadsUrl}?resourceId=${encodeURIComponent(userId)}&agentId=${encodeURIComponent(this.options.agentId)}`
-    const res = await this.fetcher()(url, { headers: this.headers(), cache: 'no-store' })
+    const ids: string[] = []
+    for (let page = 0; ; page++) {
+      const { threads, hasMore } = await this.listPage(userId, page)
+      ids.push(...threads)
+      if (!hasMore || threads.length === 0) break
+    }
+    return ids
+  }
+
+  private async listPage(
+    userId: string,
+    page: number,
+  ): Promise<{ threads: string[]; hasMore: boolean }> {
+    const params = new URLSearchParams({
+      resourceId: userId,
+      agentId: this.options.agentId,
+      page: String(page),
+      perPage: String(PER_PAGE),
+    })
+    const res = await this.fetcher()(`${this.threadsUrl}?${params.toString()}`, {
+      headers: this.headers(),
+      cache: 'no-store',
+    })
     if (!res.ok) {
       throw new Error(`Mastra list threads failed for ${userId}: ${res.status}`)
     }
-    const data = (await res.json().catch(() => null)) as unknown
-    if (!Array.isArray(data)) return []
-    return data
+    const body = (await res.json().catch(() => null)) as unknown
+    // Mastra returns `{ threads, hasMore, ... }`; tolerate a bare array too.
+    const list = Array.isArray(body) ? body : ((body as MastraThreadPage)?.threads ?? [])
+    const threads = (Array.isArray(list) ? list : [])
       .map((thread) => (thread as MastraThread).id)
       .filter((id): id is string => typeof id === 'string')
+    const hasMore = !Array.isArray(body) && (body as MastraThreadPage)?.hasMore === true
+    return { threads, hasMore }
   }
 
   private async deleteThread(threadId: string): Promise<void> {

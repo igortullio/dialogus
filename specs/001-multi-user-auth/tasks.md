@@ -99,8 +99,8 @@ before implementation.
 
 ### Implementation for User Story 2
 
-- [ ] T029 [P] [US2] Add the `library_entries` Drizzle schema in `packages/db/src/schema/library_entries.ts` (text `user_id` FK, uuid `book_id` FK, `added_at`, `deleted_at`, `UNIQUE(user_id,book_id)`, partial cursor index, `book_id` index) + export; generate migration `0009_library_entries`.
-- [ ] T030 [P] [US2] Add the `user_book_preferences` Drizzle schema in `packages/db/src/schema/user_book_preferences.ts` (text `user_id` FK, uuid `book_id` FK, `spoiler_cap_chapter int NULL`, `UNIQUE(user_id,book_id)`) + export; generate migration `0010_user_book_preferences`.
+- [x] T029 [P] [US2] Added the `library_entries` Drizzle schema in `packages/db/src/schema/library_entries.ts` (text `user_id` FK, uuid `book_id` FK, `added_at`, `deleted_at`, `UNIQUE(user_id,book_id)`, partial cursor index, `book_id` index) + export. Generated + applied migration `0009_library_and_preferences` (consolidated with T030).
+- [x] T030 [P] [US2] Added the `user_book_preferences` Drizzle schema in `packages/db/src/schema/user_book_preferences.ts` (text `user_id` FK, uuid `book_id` FK, `spoiler_cap_chapter int NULL`, `UNIQUE(user_id,book_id)`) + export. Included in migration `0009_library_and_preferences` (applied + verified in Postgres).
 - [ ] T031 [US2] Implement `LibraryEntryRepository.port.ts` + membership queries in `packages/catalog/src/infrastructure/persistence/DrizzleBookRepository.ts` (resolve-or-create by `gutendex_id`, list JOIN `library_entries` with cursor on `added_at`, membership upsert/soft-delete/restore, per-user in-flight count).
 - [ ] T032 [US2] User-scope the catalog application fns in `packages/catalog/src/application/` (`addBookToLibrary`, `listLibrary`, `getBook`, `removeBook`, `restoreBook`) to take `userId`, make add idempotent (drop `DuplicateBookError`, return a needs-ingest flag), and update exports in `packages/catalog/src/index.ts`.
 - [ ] T033 [US2] User-scope `apps/api/src/infrastructure/http/routes/library.ts` (read `userId` from `requireAuth`) and auto-enqueue ingestion with a deterministic `Idempotency-Key: ingest-{bookId}` only when the shared status is `discovered`.

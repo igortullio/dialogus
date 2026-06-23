@@ -1,4 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Server-only count helpers forward the inbound session cookie; default the
+// mock to "no inbound cookie" so the existing no-header assertions hold.
+const headersMock = vi.fn(async () => new Headers())
+vi.mock('next/headers', () => ({ headers: () => headersMock() }))
+
 import { fetchLibraryCount, fetchLibraryCountByStatus } from '../../src/lib/library'
 
 const FALLBACK = { total: 0, ready: 0 } as const
@@ -17,6 +23,8 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
 
 beforeEach(() => {
   fetchMock.mockReset()
+  headersMock.mockReset()
+  headersMock.mockResolvedValue(new Headers())
   vi.stubGlobal('fetch', fetchMock)
   process.env.NEXT_PUBLIC_API_URL = 'http://api.test'
 })
@@ -44,6 +52,17 @@ describe('fetchLibraryCount', () => {
     fetchMock.mockRejectedValueOnce(new TypeError('network down'))
 
     await expect(fetchLibraryCount()).resolves.toBe(0)
+  })
+
+  it('forwards the inbound session cookie to the auth-gated endpoint', async () => {
+    headersMock.mockResolvedValue(new Headers({ cookie: 'better-auth.session_token=abc' }))
+    fetchMock.mockResolvedValueOnce(jsonResponse({ data: [], meta: { count: 7 } }))
+
+    await expect(fetchLibraryCount()).resolves.toBe(7)
+    expect(fetchMock).toHaveBeenCalledWith('http://api.test/api/library/books?limit=1', {
+      cache: 'no-store',
+      headers: { cookie: 'better-auth.session_token=abc' },
+    })
   })
 
   it('returns 0 when the response is non-2xx', async () => {
@@ -147,7 +166,8 @@ describe('fetchLibraryCountByStatus', () => {
 
     const resultPromise = fetchLibraryCountByStatus()
 
-    await Promise.resolve()
+    // Flush the `await headers()` microtask(s) so we reach the parallel fetches.
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(fetchMock).toHaveBeenCalledTimes(2)
 
     resolveTotal(jsonResponse({ meta: { count: 3 } }))

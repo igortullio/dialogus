@@ -5,6 +5,7 @@ import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import type { Book } from '@/lib/api/_schemas'
 import { type FetchLibraryResult, fetchLibrary } from '@/lib/api/library'
+import { authClient } from '@/lib/auth-client'
 import { LIBRARY_QUERY_KEY } from '@/lib/query-keys'
 import { isInProgress } from './StatusBadge'
 
@@ -43,10 +44,15 @@ function notifyTerminalTransition(book: Book, prev: string | undefined): void {
 export function IngestionMonitor() {
   const previousByIdRef = useRef<Map<string, string>>(new Map())
   const initializedRef = useRef(false)
+  // Mounted globally in the root layout, so it renders on every page — including
+  // `/sign-in`. The library endpoint is session-gated (requireAuth), so polling
+  // it while signed out is a 401 loop. Only poll once authenticated.
+  const { data: session } = authClient.useSession()
 
   const query = useQuery<FetchLibraryResult>({
     queryKey: LIBRARY_QUERY_KEY,
     queryFn: () => fetchLibrary(),
+    enabled: Boolean(session),
     refetchInterval: (q) => {
       const data = q.state.data as FetchLibraryResult | undefined
       if (!data) return POLL_INTERVAL_MS

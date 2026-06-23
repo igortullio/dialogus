@@ -12,6 +12,7 @@ import {
   revokeMember,
   setMemberRole,
 } from '@/lib/api/admin'
+import { authClient } from '@/lib/auth-client'
 import { DeleteMemberDialog } from './DeleteMemberDialog'
 
 function errorMessageFor(error: unknown): string {
@@ -23,10 +24,91 @@ function errorMessageFor(error: unknown): string {
 
 const MEMBERS_KEY = ['admin', 'members'] as const
 
+interface MemberRowProps {
+  readonly member: Member
+  readonly isSelf: boolean
+  readonly busy: boolean
+  readonly onSetRole: (id: string, role: 'admin' | 'member') => void
+  readonly onRevoke: (id: string) => void
+  readonly onRestore: (id: string) => void
+  readonly onDeleteError: (error: unknown) => void
+}
+
+/** One member row + its access-control actions (hidden on your own row). */
+function MemberRow({
+  member,
+  isSelf,
+  busy,
+  onSetRole,
+  onRevoke,
+  onRestore,
+  onDeleteError,
+}: MemberRowProps) {
+  const nextRole = member.role === 'admin' ? 'member' : 'admin'
+  const roleLabel = member.role === 'admin' ? 'Tornar membro' : 'Tornar admin'
+
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-md border p-3">
+      <div className="flex flex-col">
+        <span className="font-medium">{member.email}</span>
+        <div className="flex items-center gap-2">
+          <Badge variant={member.role === 'admin' ? 'default' : 'secondary'}>{member.role}</Badge>
+          {member.banned ? <Badge variant="destructive">revogado</Badge> : null}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {isSelf ? (
+          // You can't revoke / demote / delete your own account here (the API
+          // also refuses self-delete + the last-admin guard); show a marker.
+          <Badge variant="outline">você</Badge>
+        ) : (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onSetRole(member.id, nextRole)}
+              disabled={busy}
+            >
+              {roleLabel}
+            </Button>
+            {member.banned ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onRestore(member.id)}
+                disabled={busy}
+              >
+                Restaurar
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onRevoke(member.id)}
+                disabled={busy}
+              >
+                Revogar
+              </Button>
+            )}
+            <DeleteMemberDialog
+              memberId={member.id}
+              email={member.email}
+              disabled={busy}
+              onError={onDeleteError}
+            />
+          </>
+        )}
+      </div>
+    </li>
+  )
+}
+
 /** Owner-facing access control: list members, revoke/restore, change role (US3). */
 export function MembersPanel() {
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
+  const { data: session } = authClient.useSession()
+  const currentUserId = session?.user?.id
 
   const membersQuery = useQuery({ queryKey: MEMBERS_KEY, queryFn: () => fetchMembers() })
 
@@ -82,66 +164,16 @@ export function MembersPanel() {
       ) : (
         <ul className="flex flex-col gap-2">
           {members.map((member) => (
-            <li
+            <MemberRow
               key={member.id}
-              className="flex items-center justify-between gap-3 rounded-md border p-3"
-            >
-              <div className="flex flex-col">
-                <span className="font-medium">{member.email}</span>
-                <div className="flex items-center gap-2">
-                  <Badge variant={member.role === 'admin' ? 'default' : 'secondary'}>
-                    {member.role}
-                  </Badge>
-                  {member.banned ? <Badge variant="destructive">revogado</Badge> : null}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {member.role === 'admin' ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => roleMutation.mutate({ id: member.id, role: 'member' })}
-                    disabled={busy}
-                  >
-                    Tornar membro
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => roleMutation.mutate({ id: member.id, role: 'admin' })}
-                    disabled={busy}
-                  >
-                    Tornar admin
-                  </Button>
-                )}
-                {member.banned ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => restoreMutation.mutate(member.id)}
-                    disabled={busy}
-                  >
-                    Restaurar
-                  </Button>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => revokeMutation.mutate(member.id)}
-                    disabled={busy}
-                  >
-                    Revogar
-                  </Button>
-                )}
-                <DeleteMemberDialog
-                  memberId={member.id}
-                  email={member.email}
-                  disabled={busy}
-                  onError={onMutationError}
-                />
-              </div>
-            </li>
+              member={member}
+              isSelf={member.id === currentUserId}
+              busy={busy}
+              onSetRole={(id, role) => roleMutation.mutate({ id, role })}
+              onRevoke={(id) => revokeMutation.mutate(id)}
+              onRestore={(id) => restoreMutation.mutate(id)}
+              onDeleteError={onMutationError}
+            />
           ))}
         </ul>
       )}

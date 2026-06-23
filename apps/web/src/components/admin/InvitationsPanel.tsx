@@ -9,6 +9,7 @@ import {
   type AdminInvitation,
   createInvitation,
   fetchInvitations,
+  type InvitationStatus,
   revokeInvitation,
 } from '@/lib/api/admin'
 
@@ -21,23 +22,35 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | '
   revoked: 'destructive',
 }
 
+const STATUS_FILTERS: ReadonlyArray<{ value: InvitationStatus; label: string }> = [
+  { value: 'pending', label: 'Pendentes' },
+  { value: 'used', label: 'Usados' },
+  { value: 'expired', label: 'Expirados' },
+  { value: 'revoked', label: 'Revogados' },
+]
+
 function StatusBadge({ status }: { readonly status: string }) {
   return <Badge variant={STATUS_VARIANT[status] ?? 'outline'}>{status}</Badge>
 }
 
-/** Owner-facing allowlist management: invite by email, list, and revoke (US3). */
+/** Owner-facing allowlist management: invite by email, filter, and revoke (US3). */
 export function InvitationsPanel() {
   const queryClient = useQueryClient()
   const emailId = useId()
+  const filterId = useId()
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Default to pending so a used/revoked invite doesn't clutter the live list;
+  // the filter exposes the other states for auditing.
+  const [statusFilter, setStatusFilter] = useState<InvitationStatus>('pending')
 
   const invitationsQuery = useQuery({
-    queryKey: INVITATIONS_KEY,
-    queryFn: () => fetchInvitations(),
+    queryKey: [...INVITATIONS_KEY, statusFilter],
+    queryFn: () => fetchInvitations({ status: statusFilter }),
   })
 
   function invalidate() {
+    // Prefix match invalidates every status filter's cached page.
     return queryClient.invalidateQueries({ queryKey: INVITATIONS_KEY })
   }
 
@@ -46,6 +59,8 @@ export function InvitationsPanel() {
     onSuccess: async () => {
       setEmail('')
       setError(null)
+      // A new invite is always pending — switch the view so it's visible.
+      setStatusFilter('pending')
       await invalidate()
     },
     onError: () =>
@@ -101,10 +116,28 @@ export function InvitationsPanel() {
         </p>
       ) : null}
 
+      <div className="flex items-center gap-2">
+        <label htmlFor={filterId} className="text-sm text-muted-foreground">
+          Mostrar
+        </label>
+        <select
+          id={filterId}
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as InvitationStatus)}
+          className="h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          {STATUS_FILTERS.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {invitationsQuery.isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando convites…</p>
       ) : invitations.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhum convite ainda.</p>
+        <p className="text-sm text-muted-foreground">Nenhum convite neste filtro.</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {invitations.map((invitation) => (

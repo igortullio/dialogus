@@ -12,6 +12,12 @@ vi.mock('../../../src/lib/api/admin', () => ({
   deleteMember: vi.fn(),
 }))
 
+// A current user that is NOT any test member, so self-action hiding doesn't
+// affect the existing assertions (it's exercised by its own test).
+vi.mock('../../../src/lib/auth-client', () => ({
+  authClient: { useSession: () => ({ data: { user: { id: 'current-admin' } } }) },
+}))
+
 import {
   deleteMember,
   fetchMembers,
@@ -75,6 +81,21 @@ describe('MembersPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /restaurar/i }))
 
     await waitFor(() => expect(restoreMember).toHaveBeenCalledWith('m1'))
+  })
+
+  it('hides revoke/role/delete on your own row and shows a "você" marker', async () => {
+    vi.mocked(fetchMembers).mockResolvedValue({
+      members: [{ ...MEMBER, id: 'current-admin', email: 'me@test.local', role: 'admin' }],
+      nextCursor: null,
+    })
+
+    renderPanel()
+    await screen.findByText('me@test.local')
+
+    expect(screen.getByText('você')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /revogar/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /tornar membro/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^excluir$/i })).toBeNull()
   })
 
   it('deletes a member account after confirming the dialog (FR-023)', async () => {

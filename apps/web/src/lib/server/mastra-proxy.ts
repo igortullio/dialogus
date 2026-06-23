@@ -17,10 +17,20 @@ export const mastraThreadsUrl = `${MASTRA}/api/memory/threads`
 export const mastraAgentId = AGENT
 
 /** fetch to Mastra with the internal auth header attached when configured. */
-export function mastraFetch(url: string, init: RequestInit = {}): Promise<Response> {
+export async function mastraFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers)
   if (MASTRA_AUTH_SECRET) headers.set('Authorization', `Bearer ${MASTRA_AUTH_SECRET}`)
-  return fetch(url, { ...init, headers })
+  try {
+    return await fetch(url, { ...init, headers })
+  } catch {
+    // Mastra is unreachable (e.g. still booting → ECONNREFUSED, or restarting).
+    // Return a clean 503 instead of letting the route handler 500 with a fetch
+    // stack trace; the client (React Query) retries until Mastra is up.
+    return new NextResponse(JSON.stringify({ error: 'mastra_unavailable' }), {
+      status: 503,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
 }
 
 /** The authenticated user's id, or null when unauthenticated. */

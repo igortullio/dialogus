@@ -1,6 +1,7 @@
 'use client'
 
 import { useQueryClient } from '@tanstack/react-query'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -19,6 +20,8 @@ export function AccountMenu() {
 
   if (!session) return null
 
+  const isAdmin = (session.user as { role?: string }).role === 'admin'
+
   async function handleSignOut() {
     setPending(true)
     await authClient.signOut()
@@ -33,6 +36,11 @@ export function AccountMenu() {
       <span className="hidden text-sm text-muted-foreground sm:inline" data-testid="account-email">
         {session.user.email}
       </span>
+      {isAdmin ? (
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/admin">Admin</Link>
+        </Button>
+      ) : null}
       <Button variant="outline" size="sm" onClick={handleSignOut} disabled={pending}>
         {pending ? 'Saindo…' : 'Sair'}
       </Button>

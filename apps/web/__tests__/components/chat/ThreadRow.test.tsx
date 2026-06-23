@@ -231,11 +231,8 @@ describe('ThreadRow — pin', () => {
 })
 
 describe('ThreadRow — delete flow', () => {
-  it('confirming deletion calls deleteThread and clears localStorage spoiler caps for the thread', async () => {
+  it('confirming deletion calls deleteThread', async () => {
     mockedDelete.mockResolvedValueOnce(undefined)
-    window.localStorage.setItem(`dialogus:spoiler_cap:${THREAD_ID}:book-1`, '5')
-    window.localStorage.setItem(`dialogus:spoiler_cap:${THREAD_ID}:book-2`, '10')
-    window.localStorage.setItem('dialogus:spoiler_cap:other-thread:book-1', '7')
     mount()
     await waitFor(() => document.querySelector('[data-slot="thread-row"]'))
     openMenu()
@@ -250,9 +247,6 @@ describe('ThreadRow — delete flow', () => {
     await waitFor(() => {
       expect(mockedDelete).toHaveBeenCalledWith(THREAD_ID)
     })
-    expect(window.localStorage.getItem(`dialogus:spoiler_cap:${THREAD_ID}:book-1`)).toBeNull()
-    expect(window.localStorage.getItem(`dialogus:spoiler_cap:${THREAD_ID}:book-2`)).toBeNull()
-    expect(window.localStorage.getItem('dialogus:spoiler_cap:other-thread:book-1')).toBe('7')
   })
 
   it('on delete failure the row is restored in cache and a toast is surfaced', async () => {

@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { mastraBaseUrl } from '@/lib/api/_envelope'
+import { apiBaseUrl, mastraBaseUrl } from '@/lib/api/_envelope'
 import { getServerSession } from '@/lib/auth-session'
 
 const PREFIX_RE = /^\[Available books:[^\]]*\]\n?/
@@ -50,9 +50,43 @@ function stripBooksPrefix(text: string): string {
   return text.replace(PREFIX_RE, '')
 }
 
-function buildMastraBody(body: Record<string, unknown>): Record<string, unknown> {
+/**
+ * Fetch the authenticated user's spoiler caps server-side from the preferences
+ * API (T037). Caps are account-scoped and session-derived — never trusted from
+ * the client body — so a tampered request can't loosen the SQL spoiler cap.
+ * `null` caps (no cap) are omitted from the map. Best-effort: on any failure the
+ * caps are empty (no cap applied) rather than failing the stream.
+ */
+async function fetchUserCaps(
+  req: NextRequest,
+  bookIds: readonly string[],
+): Promise<Record<string, number>> {
+  if (bookIds.length === 0) return {}
+  const cookie = req.headers.get('cookie')
+  const url = `${apiBaseUrl()}/api/preferences/spoiler-caps?book_ids=${encodeURIComponent(bookIds.join(','))}`
+  try {
+    const res = await fetch(url, {
+      headers: cookie ? { cookie } : {},
+      cache: 'no-store',
+    })
+    if (!res.ok) return {}
+    const payload = (await res.json()) as { data?: { caps?: Record<string, number | null> } }
+    const caps = payload.data?.caps ?? {}
+    const out: Record<string, number> = {}
+    for (const [bookId, cap] of Object.entries(caps)) {
+      if (typeof cap === 'number') out[bookId] = cap
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+function buildMastraBody(
+  body: Record<string, unknown>,
+  spoilerCaps: Record<string, number>,
+): Record<string, unknown> {
   const bookIds = (body.book_ids as string[] | undefined) ?? []
-  const spoilerCaps = (body.spoiler_caps as Record<string, number> | undefined) ?? {}
   const capsStr =
     Object.keys(spoilerCaps).length > 0 ? `; Spoiler caps: ${JSON.stringify(spoilerCaps)}` : ''
   const prefix = bookIds.length > 0 ? `[Available books: ${bookIds.join(', ')}${capsStr}]\n` : ''
@@ -72,6 +106,8 @@ function buildMastraBody(body: Record<string, unknown>): Record<string, unknown>
     ...body,
     message: `${prefix}${cleanMessage}`,
     messages,
+    // Server-authoritative caps override anything the client may have sent.
+    spoiler_caps: spoilerCaps,
   }
 }
 
@@ -137,7 +173,9 @@ export async function POST(req: NextRequest): Promise<Response> {
     return new Response('bad request', { status: 400 })
   }
 
-  const mastraBody = buildMastraBody(body)
+  const bookIds = (body.book_ids as string[] | undefined) ?? []
+  const spoilerCaps = await fetchUserCaps(req, bookIds)
+  const mastraBody = buildMastraBody(body, spoilerCaps)
   const memory = (mastraBody.memory as Record<string, unknown> | undefined) ?? {}
   mastraBody.memory = { ...memory, resource: session.user.id }
 

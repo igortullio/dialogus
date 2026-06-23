@@ -267,43 +267,11 @@ describe('AddGutendexSheet', () => {
     })
   })
 
-  it('"Adicionar" auto-starts ingestion for the freshly added (discovered) book', async () => {
+  it('does not start ingestion from the client — the API auto-enqueues on add', async () => {
     const client = makeClient()
     mockedSearch.mockResolvedValue(makeSearchResult([makeGutendexBook({ id: 42 })]))
     mockedAdd.mockResolvedValueOnce(
       makeBook({ id: 'book-42', gutendex_id: 42, ingestion_status: 'discovered' }),
-    )
-    render(
-      <Wrap client={client}>
-        <AddGutendexSheet />
-      </Wrap>,
-    )
-    act(() => {
-      openAddBookDrawer()
-    })
-    await flushDebounce()
-    const addButton = await waitFor(() => {
-      const node = document.querySelector(
-        '[data-slot="add-gutendex-row-add"]',
-      ) as HTMLButtonElement | null
-      if (!node) throw new Error('add button not found')
-      return node
-    })
-    await act(async () => {
-      fireEvent.click(addButton)
-    })
-    await waitFor(() => {
-      expect(mockedStartIngestion).toHaveBeenCalled()
-    })
-    expect(mockedStartIngestion.mock.calls[0]?.[0]).toBe('book-42')
-    expect(mockedStartIngestion.mock.calls[0]?.[1]).toEqual(expect.any(String))
-  })
-
-  it('does not auto-start ingestion when the added/restored book is already ready', async () => {
-    const client = makeClient()
-    mockedSearch.mockResolvedValue(makeSearchResult([makeGutendexBook({ id: 7 })]))
-    mockedAdd.mockResolvedValueOnce(
-      makeBook({ id: 'book-7', gutendex_id: 7, ingestion_status: 'ready' }),
     )
     render(
       <Wrap client={client}>
@@ -330,7 +298,12 @@ describe('AddGutendexSheet', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(50)
     })
+    // The server enqueues ingestion on add; the client must not double-enqueue.
     expect(mockedStartIngestion).not.toHaveBeenCalled()
+    await waitFor(() => {
+      const status = document.querySelector('[data-slot="add-gutendex-row-status"]')
+      expect(status?.textContent).toContain('Adicionado')
+    })
   })
 
   it('on add error: row enters error state and toast fires', async () => {

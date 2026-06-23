@@ -52,12 +52,42 @@ const BOOKS_BY_ID: Record<string, Book> = {
   [BOOK_B_ID]: BOOK_B,
 }
 
-function buildCapKey(bookId: string): string {
-  return `dialogus:spoiler_cap:${THREAD_ID}:${bookId}`
+// Account-scoped spoiler caps now live behind /api/preferences (not localStorage).
+// This in-memory store is the source of truth the fetch mock reads/writes.
+let capsStore: Record<string, number | null> = {}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
 }
 
-function fetchMock(input: RequestInfo | URL): Promise<Response> {
+function fetchMock(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = typeof input === 'string' ? input : input.toString()
+
+  // PUT /api/preferences/spoiler-caps/:bookId — upsert the cap.
+  const putMatch = url.match(/\/api\/preferences\/spoiler-caps\/([0-9a-f-]+)(?:\?|$)/)
+  if (putMatch && (init?.method ?? 'GET') === 'PUT') {
+    const bookId = putMatch[1] as string
+    const parsed = init?.body
+      ? (JSON.parse(init.body as string) as { spoiler_cap_chapter: number | null })
+      : { spoiler_cap_chapter: null }
+    capsStore[bookId] = parsed.spoiler_cap_chapter
+    return Promise.resolve(
+      jsonResponse({ data: { book_id: bookId, spoiler_cap_chapter: parsed.spoiler_cap_chapter } }),
+    )
+  }
+
+  // GET /api/preferences/spoiler-caps?book_ids=a,b — caps for the requested books.
+  if (url.includes('/api/preferences/spoiler-caps')) {
+    const ids = new URL(url, 'http://local').searchParams.get('book_ids')?.split(',') ?? []
+    const caps: Record<string, number | null> = {}
+    for (const id of ids) caps[id] = capsStore[id] ?? null
+    return Promise.resolve(jsonResponse({ data: { caps } }))
+  }
+
+  // GET /api/library/books/:id — book metadata for the chip.
   const match = url.match(/\/api\/library\/books\/([0-9a-f-]+)(?:\?|$)/)
   if (match) {
     const id = match[1] as string
@@ -70,19 +100,9 @@ function fetchMock(input: RequestInfo | URL): Promise<Response> {
         }),
       )
     }
-    return Promise.resolve(
-      new Response(JSON.stringify({ data: book, links: { next: null } }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-    )
+    return Promise.resolve(jsonResponse({ data: book, links: { next: null } }))
   }
-  return Promise.resolve(
-    new Response(JSON.stringify({ data: [], links: { next: null } }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    }),
-  )
+  return Promise.resolve(jsonResponse({ data: [], links: { next: null } }))
 }
 
 function makeContext(
@@ -111,13 +131,13 @@ function renderHeader(ctxOverrides: Partial<DialogusThreadContextValue> = {}) {
 }
 
 beforeEach(() => {
-  window.localStorage.clear()
+  capsStore = {}
   vi.stubGlobal('fetch', vi.fn(fetchMock))
 })
 
 afterEach(() => {
   cleanup()
-  window.localStorage.clear()
+  capsStore = {}
   vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -144,14 +164,14 @@ describe('ThreadHeader', () => {
     expect(chip?.textContent).toContain('Memórias Póstumas de Br…')
   })
 
-  it('renders no spoiler badge when there is no cap in localStorage', async () => {
+  it('renders no spoiler badge when there is no stored cap', async () => {
     renderHeader({ bookIds: [BOOK_A_ID] })
     await waitFor(() => screen.getByText(/Memórias Póstumas/))
     expect(document.querySelector('[data-slot="thread-header-cap-badge"]')).toBeNull()
   })
 
-  it('renders "Cap. ≤ 12" badge when localStorage cap is 12', async () => {
-    window.localStorage.setItem(buildCapKey(BOOK_A_ID), '12')
+  it('renders "Cap. ≤ 12" badge when the stored cap is 12', async () => {
+    capsStore[BOOK_A_ID] = 12
     renderHeader({ bookIds: [BOOK_A_ID] })
     await waitFor(() => {
       const badge = document.querySelector('[data-slot="thread-header-cap-badge"]')
@@ -174,7 +194,7 @@ describe('ThreadHeader', () => {
   })
 
   it('slider readout matches the existing cap when one is set', async () => {
-    window.localStorage.setItem(buildCapKey(BOOK_A_ID), '7')
+    capsStore[BOOK_A_ID] = 7
     renderHeader({ bookIds: [BOOK_A_ID] })
     await waitFor(() => screen.getByText(/Memórias Póstumas/))
     const chip = document.querySelector('[data-slot="thread-header-chip"]') as HTMLButtonElement
@@ -198,9 +218,9 @@ describe('ThreadHeader', () => {
     expect(readout?.textContent).toBe(String(BOOK_A.chapter_count))
   })
 
-  it('slider keyboard change writes the new value to localStorage after the debounce', async () => {
+  it('slider keyboard change persists the new value via the API after the debounce', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    window.localStorage.setItem(buildCapKey(BOOK_A_ID), '10')
+    capsStore[BOOK_A_ID] = 10
     renderHeader({ bookIds: [BOOK_A_ID] })
     await waitFor(() => screen.getByText(/Memórias Póstumas/))
     const chip = document.querySelector('[data-slot="thread-header-chip"]') as HTMLButtonElement
@@ -219,16 +239,16 @@ describe('ThreadHeader', () => {
     // ArrowLeft moves the slider down by 1 step.
     fireEvent.keyDown(thumb, { key: 'ArrowLeft' })
     expect(document.querySelector('[data-slot="thread-header-cap-readout"]')?.textContent).toBe('9')
-    // Before debounce flush, localStorage still holds the old value.
-    expect(window.localStorage.getItem(buildCapKey(BOOK_A_ID))).toBe('10')
+    // Before debounce flush, the API still holds the old value.
+    expect(capsStore[BOOK_A_ID]).toBe(10)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(250)
     })
-    expect(window.localStorage.getItem(buildCapKey(BOOK_A_ID))).toBe('9')
+    await waitFor(() => expect(capsStore[BOOK_A_ID]).toBe(9))
   })
 
-  it('toggling "Sem cap" off (cap was set) clears localStorage immediately', async () => {
-    window.localStorage.setItem(buildCapKey(BOOK_A_ID), '5')
+  it('toggling "Sem cap" off (cap was set) clears the cap via the API', async () => {
+    capsStore[BOOK_A_ID] = 5
     renderHeader({ bookIds: [BOOK_A_ID] })
     await waitFor(() => screen.getByText(/Memórias Póstumas/))
     const chip = document.querySelector('[data-slot="thread-header-chip"]') as HTMLButtonElement
@@ -241,15 +261,15 @@ describe('ThreadHeader', () => {
       '[data-slot="thread-header-no-cap-switch"]',
     ) as HTMLButtonElement
     expect(switchButton).not.toBeNull()
-    expect(switchButton.getAttribute('aria-checked')).toBe('false')
+    await waitFor(() => expect(switchButton.getAttribute('aria-checked')).toBe('false'))
     fireEvent.click(switchButton)
     await waitFor(() => {
-      expect(window.localStorage.getItem(buildCapKey(BOOK_A_ID))).toBeNull()
+      expect(capsStore[BOOK_A_ID]).toBeNull()
     })
   })
 
   it('toggling "Sem cap" on (no cap was set) writes a fresh cap at chapter_count', async () => {
-    // Start with no cap in storage. Switch is currently checked (noCap=true). Click to disable.
+    // Start with no cap. Switch is currently checked (noCap=true). Click to disable.
     renderHeader({ bookIds: [BOOK_A_ID] })
     await waitFor(() => screen.getByText(/Memórias Póstumas/))
     const chip = document.querySelector('[data-slot="thread-header-chip"]') as HTMLButtonElement
@@ -260,10 +280,10 @@ describe('ThreadHeader', () => {
     const switchButton = document.querySelector(
       '[data-slot="thread-header-no-cap-switch"]',
     ) as HTMLButtonElement
-    expect(switchButton.getAttribute('aria-checked')).toBe('true')
+    await waitFor(() => expect(switchButton.getAttribute('aria-checked')).toBe('true'))
     fireEvent.click(switchButton)
     await waitFor(() => {
-      expect(window.localStorage.getItem(buildCapKey(BOOK_A_ID))).toBe(String(BOOK_A.chapter_count))
+      expect(capsStore[BOOK_A_ID]).toBe(BOOK_A.chapter_count)
     })
   })
 

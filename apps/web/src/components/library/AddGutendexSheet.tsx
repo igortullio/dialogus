@@ -18,7 +18,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { ApiError } from '@/lib/api/_error'
 import type { Book, GutendexBook } from '@/lib/api/_schemas'
 import {
   type GutendexLanguage,
@@ -26,7 +25,7 @@ import {
   type SearchGutendexResult,
   searchGutendex,
 } from '@/lib/api/catalog'
-import { addBook, restoreBook, startIngestion } from '@/lib/api/library'
+import { addBook } from '@/lib/api/library'
 import { cn } from '@/lib/utils'
 import { CoverFallback } from './CoverFallback'
 
@@ -68,13 +67,6 @@ function makeIdempotencyKey(gutendexId: number): string {
     return `add-${gutendexId}-${crypto.randomUUID()}`
   }
   return `add-${gutendexId}-${Date.now()}`
-}
-
-function makeIngestKey(bookId: string): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `ingest-${bookId}-${crypto.randomUUID()}`
-  }
-  return `ingest-${bookId}-${Date.now()}`
 }
 
 function authorList(book: GutendexBook): string {
@@ -306,50 +298,22 @@ export function AddGutendexSheet() {
     }
   }
 
-  function existingIdFromDuplicate(error: unknown): string | null {
-    if (!(error instanceof ApiError)) return null
-    if (error.slug !== 'duplicate-gutendex-id') return null
-    const candidate = (error.problem as { existing_book_id?: unknown } | null)?.existing_book_id
-    return typeof candidate === 'string' && candidate.length > 0 ? candidate : null
-  }
-
   const addMutation = useMutation({
-    mutationFn: async (gutendexId: number): Promise<Book> => {
-      try {
-        return await addBook(gutendexId, makeIdempotencyKey(gutendexId))
-      } catch (error) {
-        // The catalog soft-deletes books, so re-adding a Gutendex id that
-        // exists (active or trashed) returns 409 duplicate-gutendex-id with
-        // the existing UUID. Restore is the user's intent here.
-        const existingId = existingIdFromDuplicate(error)
-        if (existingId !== null) {
-          return await restoreBook(existingId)
-        }
-        throw error
-      }
-    },
+    // Add is idempotent server-side now (per-user membership; resolve-or-create
+    // the shared book), so there is no duplicate-gutendex-id workaround: re-adding
+    // an active title is a no-op success and a removed one is restored by the API.
+    mutationFn: (gutendexId: number): Promise<Book> =>
+      addBook(gutendexId, makeIdempotencyKey(gutendexId)),
     onMutate: (gutendexId) => {
       setRowState(gutendexId, 'pending')
     },
     onSuccess: (book: Book, gutendexId) => {
       setRowState(gutendexId, 'added')
       syncLibraryCacheWith(book)
-      // Auto-start ingestion so "Adicionado — ingestindo…" is truthful and the
-      // book actually begins ingesting in the background, as the drawer
-      // promises. Only for freshly added books; a restored book that is
-      // already ready/failed keeps its state. The card's "Ingerir" button
-      // remains the fallback if this enqueue fails.
-      if (book.ingestion_status === 'discovered') {
-        startIngestion(book.id, makeIngestKey(book.id))
-          .then(() => {
-            // Refresh the library so the card picks up the now-in-progress
-            // status and starts showing live progress immediately.
-            queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY })
-          })
-          .catch(() => {
-            // The add itself succeeded; ingestion can be retried from the card.
-          })
-      }
+      // The API auto-enqueues ingestion on add when the shared book still needs
+      // it (`discovered`), so the client no longer starts it. Refresh the library
+      // so the card picks up the server-set in-progress status / live progress.
+      queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY })
     },
     onError: (_error, gutendexId) => {
       setRowState(gutendexId, 'error')

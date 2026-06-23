@@ -59,7 +59,7 @@ export function ThreadHeader({ className }: ThreadHeaderProps) {
         )}
       >
         {bookIds.map((bookId) => (
-          <BookChip key={bookId} threadId={threadId} bookId={bookId} />
+          <BookChip key={bookId} bookId={bookId} />
         ))}
       </div>
     </TooltipProvider>
@@ -67,17 +67,16 @@ export function ThreadHeader({ className }: ThreadHeaderProps) {
 }
 
 interface BookChipProps {
-  readonly threadId: string
   readonly bookId: string
 }
 
-function BookChip({ threadId, bookId }: BookChipProps) {
+function BookChip({ bookId }: BookChipProps) {
   const [open, setOpen] = useState(false)
   const book = useQuery<Book>({
     queryKey: bookQueryKey(bookId),
     queryFn: () => fetchBookById(bookId),
   })
-  const { cap, setCap, isLoaded } = useSpoilerCap(threadId, bookId)
+  const { cap, setCap, isLoaded } = useSpoilerCap(bookId)
 
   if (book.isPending || !book.data) {
     return (

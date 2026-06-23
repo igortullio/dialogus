@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-
-const KEY_PREFIX = 'dialogus:spoiler_cap'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchSpoilerCaps, updateSpoilerCap } from './api/preferences'
+import { BOOK_PREFERENCE_QUERY_KEY } from './query-keys'
 
 export interface UseSpoilerCapResult {
   readonly cap: number | null
@@ -10,92 +10,46 @@ export interface UseSpoilerCapResult {
   setCap(value: number | null): void
 }
 
-function buildKey(threadId: string, bookId: string): string {
-  return `${KEY_PREFIX}:${threadId}:${bookId}`
+interface SetCapContext {
+  readonly previous: number | null | undefined
 }
 
-function parseCap(raw: string | null): number | null {
-  if (raw === null) return null
-  const parsed = Number.parseInt(raw, 10)
-  return Number.isFinite(parsed) ? parsed : null
-}
+/**
+ * Account-scoped, per-book spoiler cap backed by the preferences API
+ * (`user_book_preferences`). The cap follows the user across threads and devices
+ * (FR-008/FR-009/SC-008) — there is no `threadId` anymore. `cap === null` means
+ * no cap. Writes are optimistic so the chip badge stays responsive.
+ */
+export function useSpoilerCap(bookId: string): UseSpoilerCapResult {
+  const queryClient = useQueryClient()
+  const queryKey = BOOK_PREFERENCE_QUERY_KEY(bookId)
 
-function readCap(key: string): number | null {
-  if (typeof window === 'undefined') return null
-  try {
-    return parseCap(window.localStorage.getItem(key))
-  } catch {
-    return null
-  }
-}
-
-function writeCap(key: string, value: number | null): void {
-  if (typeof window === 'undefined') return
-  try {
-    if (value === null) window.localStorage.removeItem(key)
-    else window.localStorage.setItem(key, String(value))
-  } catch {
-    // localStorage may be unavailable (private mode, quota); silently ignore.
-  }
-}
-
-function threadKeyPrefix(threadId: string): string {
-  return `${KEY_PREFIX}:${threadId}:`
-}
-
-function enumerateThreadKeys(threadId: string): string[] {
-  if (typeof window === 'undefined') return []
-  const prefix = threadKeyPrefix(threadId)
-  const keys: string[] = []
-  try {
-    for (let i = 0; i < window.localStorage.length; i++) {
-      const key = window.localStorage.key(i)
-      if (key?.startsWith(prefix)) keys.push(key)
-    }
-  } catch {
-    return []
-  }
-  return keys
-}
-
-export function useSpoilerCap(threadId: string, bookId: string): UseSpoilerCapResult {
-  const [cap, setCapState] = useState<number | null>(null)
-  const [isLoaded, setIsLoaded] = useState(false)
-
-  useEffect(() => {
-    setCapState(readCap(buildKey(threadId, bookId)))
-    setIsLoaded(true)
-  }, [threadId, bookId])
-
-  const setCap = useCallback(
-    (value: number | null) => {
-      writeCap(buildKey(threadId, bookId), value)
-      setCapState(value)
+  const query = useQuery<number | null>({
+    queryKey,
+    queryFn: async () => {
+      const caps = await fetchSpoilerCaps([bookId])
+      return caps[bookId] ?? null
     },
-    [threadId, bookId],
-  )
+  })
 
-  return { cap, isLoaded, setCap }
-}
+  const mutation = useMutation<number | null, Error, number | null, SetCapContext>({
+    mutationFn: (value) => updateSpoilerCap(bookId, value),
+    onMutate: (value) => {
+      const previous = queryClient.getQueryData<number | null>(queryKey)
+      queryClient.setQueryData<number | null>(queryKey, value)
+      return { previous }
+    },
+    onError: (_error, _value, context) => {
+      if (context) queryClient.setQueryData<number | null>(queryKey, context.previous ?? null)
+    },
+    onSuccess: (value) => {
+      queryClient.setQueryData<number | null>(queryKey, value)
+    },
+  })
 
-export function readAllSpoilerCaps(threadId: string): Record<string, number> {
-  const prefix = threadKeyPrefix(threadId)
-  const out: Record<string, number> = {}
-  for (const key of enumerateThreadKeys(threadId)) {
-    const bookId = key.slice(prefix.length)
-    if (bookId.length === 0) continue
-    const value = readCap(key)
-    if (value !== null) out[bookId] = value
-  }
-  return out
-}
-
-export function clearSpoilerCapsForThread(threadId: string): void {
-  if (typeof window === 'undefined') return
-  const keys = enumerateThreadKeys(threadId)
-  try {
-    for (const key of keys) window.localStorage.removeItem(key)
-  } catch {
-    // ignore
+  return {
+    cap: query.data ?? null,
+    isLoaded: query.isFetched,
+    setCap: (value) => mutation.mutate(value),
   }
 }

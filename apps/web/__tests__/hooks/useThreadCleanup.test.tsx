@@ -15,6 +15,7 @@ import { toast } from 'sonner'
 import { THREADS_QUERY_KEY, useThreadCleanup } from '../../src/hooks/useThreadCleanup'
 import type { Thread } from '../../src/lib/api/_schemas'
 import { deleteThread } from '../../src/lib/api/threads'
+import { BOOK_PREFERENCE_QUERY_KEY } from '../../src/lib/query-keys'
 
 const mockedDelete = vi.mocked(deleteThread)
 const mockedToastError = vi.mocked(toast.error)
@@ -49,16 +50,13 @@ afterEach(() => {
 })
 
 describe('useThreadCleanup', () => {
-  it('clears localStorage spoiler caps for the thread before the API call fires', async () => {
+  it('optimistically removes the thread without touching account-scoped book caps', async () => {
     let resolveDelete!: () => void
     mockedDelete.mockReturnValueOnce(
       new Promise<void>((resolve) => {
         resolveDelete = resolve
       }),
     )
-    window.localStorage.setItem(`dialogus:spoiler_cap:${THREAD_ID}:b1`, '5')
-    window.localStorage.setItem(`dialogus:spoiler_cap:${THREAD_ID}:b2`, '7')
-    window.localStorage.setItem('dialogus:spoiler_cap:other:b1', '3')
 
     const client = new QueryClient({
       defaultOptions: {
@@ -67,6 +65,9 @@ describe('useThreadCleanup', () => {
       },
     })
     client.setQueryData(THREADS_QUERY_KEY, [makeThread(THREAD_ID), makeThread('other')])
+    // Spoiler caps are per-book and account-scoped; deleting a thread must leave
+    // them intact (they are shared across the user's other threads).
+    client.setQueryData(BOOK_PREFERENCE_QUERY_KEY('b1'), 5)
 
     const { result } = renderHook(() => useThreadCleanup(THREAD_ID), {
       wrapper: makeWrapper(client),
@@ -77,12 +78,10 @@ describe('useThreadCleanup', () => {
       await Promise.resolve()
     })
 
-    expect(window.localStorage.getItem(`dialogus:spoiler_cap:${THREAD_ID}:b1`)).toBeNull()
-    expect(window.localStorage.getItem(`dialogus:spoiler_cap:${THREAD_ID}:b2`)).toBeNull()
-    expect(window.localStorage.getItem('dialogus:spoiler_cap:other:b1')).toBe('3')
-
     const optimistic = client.getQueryData(THREADS_QUERY_KEY) as Thread[]
     expect(optimistic.find((t) => t.id === THREAD_ID)).toBeUndefined()
+    // The book cap survives the thread deletion.
+    expect(client.getQueryData(BOOK_PREFERENCE_QUERY_KEY('b1'))).toBe(5)
 
     await act(async () => {
       resolveDelete()

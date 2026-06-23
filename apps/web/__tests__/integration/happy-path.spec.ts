@@ -6,10 +6,6 @@ const INGEST_TIMEOUT_MS = 10 * 60 * 1000
 const STREAM_COMPLETION_TIMEOUT_MS = 60 * 1000
 const RENAMED_THREAD_TITLE = 'Memorias deep dive'
 
-function libraryStorageKeyPattern(threadId: string): RegExp {
-  return new RegExp(`^dialogus:spoiler_cap:${threadId}:`)
-}
-
 async function waitForBookReady(page: Page): Promise<void> {
   const card = page.locator(
     `[data-slot="onboarding-book-card"][data-gutendex-id="${BRAS_CUBAS_GUTENDEX_ID}"]`,
@@ -76,18 +72,6 @@ async function readActiveThreadId(page: Page): Promise<string> {
     throw new Error('No active thread row found in sidebar.')
   }
   return threadId
-}
-
-async function readSpoilerCapKeysForThread(page: Page, threadId: string): Promise<string[]> {
-  return page.evaluate((tid) => {
-    const prefix = `dialogus:spoiler_cap:${tid}:`
-    const keys: string[] = []
-    for (let i = 0; i < window.localStorage.length; i += 1) {
-      const key = window.localStorage.key(i)
-      if (key?.startsWith(prefix)) keys.push(key)
-    }
-    return keys
-  }, threadId)
 }
 
 test.describe('Feature 004 — chat-first happy path', () => {
@@ -210,43 +194,17 @@ test.describe('Feature 004 — chat-first happy path', () => {
     })
 
     let secondThreadId = ''
-    await test.step('9. Create a second thread, then delete it; verify localStorage cleanup', async () => {
+    await test.step('9. Create a second thread, then delete it', async () => {
       await startNewThread(page)
       await selectBrasCubas(page, firstThreadBookId)
       await sendMessage(page, 'segunda conversa de teste')
       await waitForAssistantMessageReady(page)
       secondThreadId = await readActiveThreadId(page)
-      const chip = page.locator(
-        `[data-slot="thread-header-chip"][data-book-id="${firstThreadBookId}"]`,
-      )
-      await chip.click()
-      const slider = page.locator('[data-slot="thread-header-popover"] [role="slider"]').first()
-      await slider.focus()
-      await page.keyboard.press('ArrowDown')
-      await page.keyboard.press('Escape')
-      await expect
-        .poll(async () => (await readSpoilerCapKeysForThread(page, secondThreadId)).length, {
-          timeout: 5_000,
-        })
-        .toBeGreaterThan(0)
       const row = page.locator(`[data-slot="thread-row"][data-thread-id="${secondThreadId}"]`)
       await row.locator('[data-slot="thread-row-menu-trigger"]').click()
       await page.locator('[data-slot="thread-row-delete"]').click()
       await page.locator('[data-slot="thread-row-delete-confirm"]').click()
       await expect(row).toHaveCount(0, { timeout: 10_000 })
-      const remaining = await readSpoilerCapKeysForThread(page, secondThreadId)
-      expect(remaining).toEqual([])
-      const pattern = libraryStorageKeyPattern(secondThreadId)
-      const remainingMatching = await page.evaluate((src) => {
-        const re = new RegExp(src)
-        const out: string[] = []
-        for (let i = 0; i < window.localStorage.length; i += 1) {
-          const key = window.localStorage.key(i)
-          if (key && re.test(key)) out.push(key)
-        }
-        return out
-      }, pattern.source)
-      expect(remainingMatching).toEqual([])
     })
   })
 })

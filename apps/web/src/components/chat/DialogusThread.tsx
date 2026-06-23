@@ -7,7 +7,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useCallback, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { THREADS_QUERY_KEY } from '@/lib/query-keys'
-import { readAllSpoilerCaps } from '@/lib/spoiler-cap'
 import { cn } from '@/lib/utils'
 import { openAddBookDrawer } from './add-book-drawer-store'
 import {
@@ -149,8 +148,6 @@ export function DialogusThread({
             persistenceRef.current.effectiveThreadId = effectiveThreadId
           }
 
-          const spoiler_caps = readAllSpoilerCaps(effectiveThreadId)
-
           // Note: thread is created implicitly by the stream (memory.thread).
           // Metadata is written in onFinish where the thread is guaranteed to
           // exist — PATCHing before that loses to a race and returns 404.
@@ -166,10 +163,12 @@ export function DialogusThread({
             // `generateTitle` never fires. `resource` is injected server-side
             // by the stream proxy from the session (never trusted from here).
             memory: { thread: effectiveThreadId },
-            requestContext: { book_ids: currentBookIds, spoiler_caps },
-            // Legacy snake_case mirrors kept for the route's prefix builder.
+            // Spoiler caps are NOT sent from the client: the stream proxy sources
+            // the authenticated user's caps server-side from the preferences API
+            // (account-scoped, can't be tampered with). Only `book_ids` is sent so
+            // the proxy knows which caps to apply.
+            requestContext: { book_ids: currentBookIds },
             book_ids: currentBookIds,
-            spoiler_caps,
           }
           return { body: requestBody }
         },

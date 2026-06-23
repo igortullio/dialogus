@@ -5,7 +5,6 @@ import { toast } from 'sonner'
 import type { Thread } from '@/lib/api/_schemas'
 import { deleteThread } from '@/lib/api/threads'
 import { THREADS_QUERY_KEY } from '@/lib/query-keys'
-import { clearSpoilerCapsForThread } from '@/lib/spoiler-cap'
 
 const ROLLBACK_TOAST_MESSAGE = 'Não foi possível excluir a conversa.'
 
@@ -26,7 +25,8 @@ export function useThreadCleanup(threadId: string): UseThreadCleanupResult {
   const mutation = useMutation<void, Error, void, DeleteContext>({
     mutationFn: () => deleteThread(threadId),
     onMutate: async () => {
-      clearSpoilerCapsForThread(threadId)
+      // Spoiler caps are per-book and account-scoped now (not per-thread), so
+      // deleting a thread must NOT remove the user's book caps.
       await queryClient.cancelQueries({ queryKey: THREADS_QUERY_KEY })
       const previous = queryClient.getQueryData<Thread[]>(THREADS_QUERY_KEY)
       if (previous !== undefined) {

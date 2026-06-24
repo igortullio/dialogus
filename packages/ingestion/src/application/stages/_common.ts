@@ -125,10 +125,19 @@ export async function updateBookState(
   await db.update(books).set(set).where(eq(books.id, bookId))
 }
 
+/**
+ * Prefer plain TXT over EPUB for chaptering. Project Gutenberg TXT is the
+ * canonical, predictable form: real chapters are flagged by `CHAPTER <n>`
+ * headings (caught by the TXT heuristics) and the START/END license boilerplate
+ * is stripped by `GutenbergCleaner`. The Gutenberg EPUBs, by contrast, surface
+ * front-matter sections (title page, translator note, the *license itself*) as
+ * "chapters" and group the real chapters coarsely — so EPUB is the fallback,
+ * used only when no TXT is offered.
+ */
 export function preferredFormat(book: BookRecordForStage): 'epub' | 'txt' {
-  if (book.downloadUrlEpub) return 'epub'
   if (book.downloadUrlTxt) return 'txt'
-  return 'epub'
+  if (book.downloadUrlEpub) return 'epub'
+  return 'txt'
 }
 
 export function rawFilePath(

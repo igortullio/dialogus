@@ -157,7 +157,8 @@ describe('downloadStage — happy path', () => {
 
     expect(mock.findFirstCalls).toBe(1)
     expect(downloader.download).toHaveBeenCalledTimes(1)
-    expect(downloader.download).toHaveBeenCalledWith(GUTENDEX_ID, 'epub')
+    // TXT is preferred over EPUB for predictable chaptering (Gutenberg framing).
+    expect(downloader.download).toHaveBeenCalledWith(GUTENDEX_ID, 'txt')
 
     const downloadingUpdate = mock.updates[0]?.set
     expect(downloadingUpdate?.ingestionStatus).toBe('downloading')
@@ -180,7 +181,7 @@ describe('downloadStage — happy path', () => {
     })
   })
 
-  it('falls back to txt when only the txt URL is available', async () => {
+  it('uses txt when only the txt URL is available', async () => {
     const book = makeBook({ downloadUrlEpub: null, downloadUrlTxt: 'https://example.test/txt' })
     const mock = makeMockDb(book)
     const downloader = makeDownloader()
@@ -194,13 +195,28 @@ describe('downloadStage — happy path', () => {
 
     expect(downloader.download).toHaveBeenCalledWith(GUTENDEX_ID, 'txt')
   })
+
+  it('falls back to epub when only the epub URL is available', async () => {
+    const book = makeBook({ downloadUrlEpub: 'https://example.test/epub', downloadUrlTxt: null })
+    const mock = makeMockDb(book)
+    const downloader = makeDownloader()
+    const pgboss = makePgBoss()
+    const { logger } = makeLogger()
+
+    await downloadStage(
+      { bookId: BOOK_ID },
+      { db: mock.db, logger, downloader, pgboss, storageRoot: workdir },
+    )
+
+    expect(downloader.download).toHaveBeenCalledWith(GUTENDEX_ID, 'epub')
+  })
 })
 
 describe('downloadStage — SHA-256 idempotency check', () => {
   it('skips re-download when an existing raw file matches the stored hash', async () => {
     const body = Buffer.from('existing-raw-content')
     const expectedHash = sha256(body)
-    await placeRawFile('epub', body)
+    await placeRawFile('txt', body)
 
     const book = makeBook({ rawHash: expectedHash })
     const mock = makeMockDb(book)
@@ -225,7 +241,7 @@ describe('downloadStage — SHA-256 idempotency check', () => {
   })
 
   it('re-downloads when the existing raw file hash does not match the stored hash', async () => {
-    await placeRawFile('epub', 'tampered-content')
+    await placeRawFile('txt', 'tampered-content')
     const book = makeBook({ rawHash: sha256('original-content') })
     const mock = makeMockDb(book)
     const downloader = makeDownloader()

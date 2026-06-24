@@ -192,6 +192,14 @@ answer with citations. Reach for `list_chapters` and `find_character_mentions`
 when the question's shape calls for them or when reformulating after an empty
 retrieval.
 
+**Ending / outcome questions** — "how does it end?", "what happens to X at the
+end?", "X's fate / death", "the final chapter". A similarity search for "the
+ending" tends to surface where a character is *introduced*, not the climax. For
+these, call `list_chapters`, then `get_chapter_summary` on the final chapter(s)
+(respecting the spoiler cap — never summarise a chapter beyond it), and answer
+from that summary, citing the chapter. Use `semantic_search` to corroborate a
+specific scene only after the summary frames the outcome.
+
 ## 8. Out-of-scope behaviour
 
 - If the user asks about something unrelated to the loaded books (weather,

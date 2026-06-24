@@ -42,8 +42,14 @@ export function AccountMenu() {
   }
 
   return (
-    <div className="fixed right-4 top-4 z-50 flex items-center gap-2">
-      <span className="hidden text-sm text-muted-foreground sm:inline" data-testid="account-email">
+    // `top-2` lines this row up with the chat header (`py-2` + the book chip),
+    // so the account row and the header sit at the same height; `items-center`
+    // keeps the email + buttons vertically centered on one line.
+    <div className="fixed right-4 top-2 z-50 flex h-8 items-center gap-2">
+      <span
+        className="hidden text-sm leading-none text-muted-foreground sm:inline"
+        data-testid="account-email"
+      >
         {session.user.email}
       </span>
       {isAdmin ? (

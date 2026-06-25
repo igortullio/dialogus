@@ -57,6 +57,14 @@ function makeStatus(
     indexed_at: null,
     last_stage: null,
     error: null,
+    overall_progress: 0,
+    stage_index: 0,
+    total_stages: 7,
+    stages: [],
+    elapsed_ms: null,
+    eta_ms: null,
+    queued: false,
+    stalled: false,
     ...overrides,
   }
 }
@@ -207,7 +215,8 @@ describe('BookCard', () => {
   it('failed: shows error text + "Tentar novamente" which opens confirm and retries ingestion', async () => {
     const book = makeBook({
       ingestion_status: 'failed',
-      ingestion_error: 'Falha ao baixar conteúdo do Gutendex.',
+      // Raw `<slug>: <message>` field — the UI must localize it, never show it raw.
+      ingestion_error: 'ingestion-download-failed: Streaming to storage/raw/84.txt failed',
     })
     mockedRetry.mockResolvedValueOnce({ jobId: 'job-r', resumingStage: 'download' })
     render(
@@ -215,7 +224,9 @@ describe('BookCard', () => {
         <BookCard book={book} />
       </Wrap>,
     )
-    expect(screen.getByText('Falha ao baixar conteúdo do Gutendex.')).toBeDefined()
+    // Localized, friendly message — and the raw slug is NOT rendered (regression).
+    expect(screen.getByText(/Não foi possível baixar o livro do Gutendex/)).toBeDefined()
+    expect(screen.queryByText(/ingestion-download-failed/)).toBeNull()
     const retry = document.querySelector(
       '[data-slot="book-card-action-retry"]',
     ) as HTMLButtonElement
@@ -238,7 +249,7 @@ describe('BookCard', () => {
     expect(mockedRetry.mock.calls[0]?.[0]).toBe(book.id)
   })
 
-  it('in-progress: renders the progress bar and no actions', async () => {
+  it('in-progress: renders the stage stepper (overall bar) and no actions', async () => {
     const book = makeBook({ ingestion_status: 'embedding' })
     mockedStatus.mockResolvedValueOnce(
       makeStatus({
@@ -246,6 +257,8 @@ describe('BookCard', () => {
         status: 'embedding',
         stage: 'embed',
         progress: 65,
+        overall_progress: 65,
+        stage_index: 5,
       }),
     )
     render(
@@ -254,7 +267,7 @@ describe('BookCard', () => {
       </Wrap>,
     )
     await waitFor(() => {
-      const bar = document.querySelector('[data-slot="book-card-progress-bar"]')
+      const bar = document.querySelector('[data-slot="stage-stepper-overall-bar"]')
       expect(bar?.getAttribute('aria-valuenow')).toBe('65')
     })
     expect(document.querySelector('[data-slot="book-card-action-ingest"]')).toBeNull()
@@ -292,6 +305,8 @@ describe('BookCard', () => {
         status: 'embedding',
         stage: 'embed',
         progress: 100,
+        overall_progress: 100,
+        stage_index: 5,
       }),
     )
     const { rerender } = render(
@@ -300,7 +315,7 @@ describe('BookCard', () => {
       </Wrap>,
     )
     await waitFor(() => {
-      const bar = document.querySelector('[data-slot="book-card-progress-bar"]')
+      const bar = document.querySelector('[data-slot="stage-stepper-overall-bar"]')
       expect(bar?.getAttribute('aria-valuenow')).toBe('100')
     })
 

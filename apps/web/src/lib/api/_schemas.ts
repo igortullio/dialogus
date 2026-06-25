@@ -21,6 +21,8 @@ export const bookSchema = z.object({
   raw_hash: z.string().nullable().optional(),
   ingestion_status: ingestionStatusEnum,
   ingestion_error: z.string().nullable(),
+  // Coarse whole-pipeline progress for the list card's overall bar (feature 002).
+  ingestion_overall_progress: z.number().int().min(0).max(100).optional(),
   tags: z.array(z.string()),
   created_at: z.iso.datetime({ offset: true }),
   updated_at: z.iso.datetime({ offset: true }),

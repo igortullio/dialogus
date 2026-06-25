@@ -1,11 +1,13 @@
 import { sql } from 'drizzle-orm'
 import { IndexError } from '../../domain/ingestion/IngestionError'
 import {
+  beginStage,
+  completeStage,
+  failStage,
   findBookForStage,
   INGESTION_ERROR_SLUGS,
   type StageDeps,
   type StagePayload,
-  updateBookState,
 } from './_common'
 
 export type IndexStageDeps = Pick<StageDeps, 'db' | 'logger'>
@@ -14,31 +16,19 @@ export async function indexStage(payload: StagePayload, deps: IndexStageDeps): P
   const stageStartedAt = Date.now()
   const book = await findBookForStage(deps.db, payload.bookId)
 
-  await updateBookState(deps.db, book.id, {
-    ingestionStatus: 'indexing',
-    ingestionProgress: 0,
-    ingestionLastStage: 'index',
-    ingestionError: null,
-  })
+  await beginStage(deps.db, book.id, 'index')
 
   const indexedAt = new Date()
 
   try {
     await deps.db.execute(sql`VACUUM ANALYZE chunks`)
-    await updateBookState(deps.db, book.id, {
-      ingestionStatus: 'ready',
-      ingestionProgress: 100,
-      indexedAt,
-    })
+    await completeStage(deps.db, book.id, 'index', { finalStatus: 'ready', indexedAt })
   } catch (error) {
     const wrapped =
       error instanceof IndexError
         ? error
         : new IndexError(`Index stage failed for book ${book.id}`, { cause: error })
-    await updateBookState(deps.db, book.id, {
-      ingestionStatus: 'failed',
-      ingestionError: `${INGESTION_ERROR_SLUGS.index}: ${wrapped.message}`,
-    })
+    await failStage(deps.db, book.id, 'index', `${INGESTION_ERROR_SLUGS.index}: ${wrapped.message}`)
     deps.logger.error(
       {
         event: 'stage_failed',

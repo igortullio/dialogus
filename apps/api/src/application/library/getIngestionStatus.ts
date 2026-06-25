@@ -2,12 +2,28 @@ import { BookNotFoundError, type LibraryEntryRepository } from '@dialogus/catalo
 import type { Database } from '@dialogus/db'
 import { books } from '@dialogus/db/schema'
 import type { IngestionStatusDto } from '@dialogus/shared/schemas/ingestion'
+import { TOTAL_INGESTION_STAGES } from '@dialogus/shared/schemas/ingestion'
 import { eq } from 'drizzle-orm'
-import { isIngestionStage, parseIngestionErrorField, statusToActiveStage } from './ingestionStatus'
+import {
+  computeOverallProgress,
+  deriveErrorStage,
+  deriveQueued,
+  deriveStageBreakdown,
+  deriveStageIndex,
+  deriveStalled,
+  estimateEta,
+  isIngestionStage,
+  parseIngestionErrorField,
+  statusToActiveStage,
+} from './ingestionStatus'
+
+const DEFAULT_STALL_THRESHOLD_MS = 60_000
 
 export interface GetIngestionStatusDeps {
   readonly db: Database
   readonly libraryRepo: LibraryEntryRepository
+  /** Idle window before a non-terminal book reads as stalled (FR-016). */
+  readonly stallThresholdMs?: number
 }
 
 export async function getIngestionStatus(
@@ -27,8 +43,10 @@ export async function getIngestionStatus(
       ingestionProgress: true,
       ingestionError: true,
       ingestionLastStage: true,
+      ingestionStages: true,
       ingestionStartedAt: true,
       indexedAt: true,
+      updatedAt: true,
     },
   })
   if (!row) throw new BookNotFoundError(`Book ${bookId} not found`)
@@ -40,6 +58,11 @@ export async function getIngestionStatus(
       ? lastStage
       : activeStage
 
+  const now = Date.now()
+  const stages = deriveStageBreakdown(row.ingestionStages, row.ingestionStatus, stage)
+  const parsedError = parseIngestionErrorField(row.ingestionError)
+  const errorStage = deriveErrorStage(row.ingestionStatus, lastStage)
+
   return {
     book_id: row.id,
     status: row.ingestionStatus,
@@ -48,6 +71,19 @@ export async function getIngestionStatus(
     started_at: row.ingestionStartedAt ? row.ingestionStartedAt.toISOString() : null,
     indexed_at: row.indexedAt ? row.indexedAt.toISOString() : null,
     last_stage: lastStage,
-    error: parseIngestionErrorField(row.ingestionError),
+    error: parsedError ? { ...parsedError, stage: errorStage } : null,
+    overall_progress: computeOverallProgress(row.ingestionStatus, stage, row.ingestionProgress),
+    stage_index: deriveStageIndex(stage, row.ingestionStatus),
+    total_stages: TOTAL_INGESTION_STAGES,
+    stages,
+    elapsed_ms: row.ingestionStartedAt ? now - row.ingestionStartedAt.getTime() : null,
+    eta_ms: estimateEta(stages, stage, now),
+    queued: deriveQueued(stages, stage),
+    stalled: deriveStalled(
+      row.ingestionStatus,
+      row.updatedAt,
+      deps.stallThresholdMs ?? DEFAULT_STALL_THRESHOLD_MS,
+      now,
+    ),
   }
 }

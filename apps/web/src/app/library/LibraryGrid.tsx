@@ -63,7 +63,8 @@ export function LibraryGrid({ initialData, className }: LibraryGridProps) {
   const hasMatches = filtered.length > 0
 
   return (
-    <section
+    // `main` landmark: keeps all library content inside a region (axe a11y, SC-008).
+    <main
       data-slot="library-page"
       className={cn('flex h-full flex-col gap-6 px-6 py-8 lg:px-10', className)}
     >
@@ -153,7 +154,7 @@ export function LibraryGrid({ initialData, className }: LibraryGridProps) {
           <p className="mt-1 text-muted-foreground text-sm">{EMPTY_FILTER_BODY}</p>
         </div>
       )}
-    </section>
+    </main>
   )
 }
 

@@ -171,7 +171,7 @@ describe('parseStage — EPUB path', () => {
     expect(updates[0]?.set.ingestionStatus).toBe('parsing')
     expect(updates[0]?.set.ingestionProgress).toBe(0)
     expect(updates[0]?.set.ingestionLastStage).toBe('parse')
-    expect(updates.at(-1)?.set.ingestionProgress).toBe(100)
+    expect(updates.some((u) => u.set.ingestionProgress === 100)).toBe(true)
   })
 })
 

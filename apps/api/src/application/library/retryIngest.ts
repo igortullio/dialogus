@@ -1,6 +1,7 @@
 import { BookNotFoundError, type LibraryEntryRepository } from '@dialogus/catalog'
 import type { Database } from '@dialogus/db'
 import { books } from '@dialogus/db/schema'
+import { resetStagesFrom } from '@dialogus/ingestion/application/stages/_common'
 import type {
   IngestionEnqueueResponseDto,
   IngestionStage,
@@ -39,7 +40,12 @@ export async function retryIngestBook(
 
   const row = await deps.db.query.books.findFirst({
     where: eq(books.id, bookId),
-    columns: { id: true, ingestionStatus: true, ingestionLastStage: true },
+    columns: {
+      id: true,
+      ingestionStatus: true,
+      ingestionLastStage: true,
+      ingestionStages: true,
+    },
   })
   if (!row) throw new BookNotFoundError(`Book ${bookId} not found`)
   if (row.ingestionStatus === 'ready') throw new BookAlreadyReadyError(bookId)
@@ -50,6 +56,13 @@ export async function retryIngestBook(
   const lastStage = row.ingestionLastStage
   const resumeStage: IngestionStage =
     lastStage !== null && isIngestionStage(lastStage) ? lastStage : 'download'
+
+  // Resume-not-restart, made auditable: reset the resumed stage and everything
+  // after it to pending; earlier completed/cached stage records are preserved.
+  await deps.db
+    .update(books)
+    .set({ ingestionStages: resetStagesFrom(row.ingestionStages, resumeStage) })
+    .where(eq(books.id, bookId))
 
   const enqueueFn = deps.enqueueImpl ?? enqueue
   const jobId = await enqueueFn(deps.enqueueDeps, `ingestion.${resumeStage}`, { bookId })

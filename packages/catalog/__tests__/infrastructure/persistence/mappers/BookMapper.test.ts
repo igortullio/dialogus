@@ -26,6 +26,7 @@ function buildRow(overrides: Partial<BookRow> = {}): BookRow {
     ingestionError: null,
     ingestionProgress: 0,
     ingestionLastStage: null,
+    ingestionStages: [],
     ingestionStartedAt: null,
     indexedAt: null,
     tags: [],

@@ -56,6 +56,7 @@ describe('books table', () => {
         'ingestion_error',
         'ingestion_last_stage',
         'ingestion_progress',
+        'ingestion_stages',
         'ingestion_started_at',
         'ingestion_status',
         'languages',

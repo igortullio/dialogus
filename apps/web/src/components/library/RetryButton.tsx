@@ -1,5 +1,6 @@
 'use client'
 
+import type { IngestionStage } from '@dialogus/shared/schemas/ingestion'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
@@ -16,27 +17,26 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { retryIngestion } from '@/lib/api/library'
+import { stageDisplayName } from '@/lib/ingestion/messages'
 import { cn } from '@/lib/utils'
 
 const RETRY_LABEL = 'Tentar novamente'
-const TITLE = 'Tentar a ingestão novamente?'
-const DESCRIPTION_PREFIX =
-  'Repetir a ingestão pode levar alguns minutos e consumir recursos do Gutendex.'
+const TITLE = 'Retomar a ingestão?'
+const DESCRIPTION_GENERIC =
+  'A ingestão será retomada do ponto em que parou. Pode levar alguns minutos.'
 const NO_ERROR_FALLBACK = 'Nenhuma mensagem de erro disponível.'
-const CONFIRM_LABEL = 'Tentar novamente'
-const CONFIRM_PENDING_LABEL = 'Reiniciando…'
+const CONFIRM_LABEL = 'Retomar'
+const CONFIRM_PENDING_LABEL = 'Retomando…'
 const CANCEL_LABEL = 'Cancelar'
-const ERROR_TOAST = 'Não foi possível reiniciar a ingestão.'
-const SUCCESS_TOAST_PREFIX = 'Reingestão iniciada'
-const STAGE_LABEL: Record<string, string> = {
-  download: 'baixar',
-  clean: 'limpar',
-  parse: 'parsear',
-  chunk: 'chunking',
-  summarize: 'sumarizar',
-  embed: 'embeddings',
-  index: 'indexar',
+const ERROR_TOAST = 'Não foi possível retomar a ingestão.'
+const SUCCESS_TOAST_PREFIX = 'Ingestão retomada'
+
+/** Resume wording (feature 002): name the stage + state that completed work is kept. */
+function resumeDescription(resumeStage: IngestionStage | null | undefined): string {
+  if (!resumeStage) return DESCRIPTION_GENERIC
+  return `Continua da etapa "${stageDisplayName(resumeStage)}" — as etapas já concluídas não serão refeitas. Pode levar alguns minutos.`
 }
+
 const LIBRARY_QUERY_KEY = ['library'] as const
 const INGESTION_QUERY_KEY = (id: string) => ['ingestion', id] as const
 
@@ -50,6 +50,7 @@ function makeIdempotencyKey(bookId: string): string {
 export interface RetryButtonProps {
   readonly bookId: string
   readonly lastError?: string | null
+  readonly resumeStage?: IngestionStage | null
   readonly className?: string
   readonly triggerLabel?: string
 }
@@ -57,6 +58,7 @@ export interface RetryButtonProps {
 export function RetryButton({
   bookId,
   lastError,
+  resumeStage,
   className,
   triggerLabel = RETRY_LABEL,
 }: RetryButtonProps) {
@@ -69,8 +71,8 @@ export function RetryButton({
       queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY })
       queryClient.invalidateQueries({ queryKey: INGESTION_QUERY_KEY(bookId) })
       setOpen(false)
-      const stage = STAGE_LABEL[result.resumingStage] ?? result.resumingStage
-      toast.success(`${SUCCESS_TOAST_PREFIX} — retomando do estágio "${stage}".`)
+      const stage = stageDisplayName((result.resumingStage as IngestionStage) ?? 'download')
+      toast.success(`${SUCCESS_TOAST_PREFIX} — retomando da etapa "${stage}".`)
     },
     onError: () => {
       toast.error(ERROR_TOAST)
@@ -96,7 +98,7 @@ export function RetryButton({
           <AlertDialogHeader>
             <AlertDialogTitle>{TITLE}</AlertDialogTitle>
             <AlertDialogDescription data-slot="retry-button-dialog-description">
-              {DESCRIPTION_PREFIX}
+              {resumeDescription(resumeStage)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <p
@@ -136,13 +138,13 @@ export function RetryButton({
 export const _internals = {
   RETRY_LABEL,
   TITLE,
-  DESCRIPTION_PREFIX,
+  DESCRIPTION_GENERIC,
+  resumeDescription,
   NO_ERROR_FALLBACK,
   CONFIRM_LABEL,
   CONFIRM_PENDING_LABEL,
   CANCEL_LABEL,
   ERROR_TOAST,
   SUCCESS_TOAST_PREFIX,
-  STAGE_LABEL,
   makeIdempotencyKey,
 }

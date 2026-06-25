@@ -138,7 +138,7 @@ describe('cleanStage — happy path', () => {
     expect(updates[0]?.set.ingestionProgress).toBe(0)
     expect(updates[0]?.set.ingestionLastStage).toBe('clean')
     expect(updates[0]?.set.ingestionError).toBeNull()
-    expect(updates.at(-1)?.set.ingestionProgress).toBe(100)
+    expect(updates.some((u) => u.set.ingestionProgress === 100)).toBe(true)
 
     expect(pgboss.send).toHaveBeenCalledWith('ingestion.parse', { bookId: BOOK_ID })
 
@@ -169,7 +169,7 @@ describe('cleanStage — idempotency', () => {
     expect(stillThere).toBe(preCleaned)
 
     expect(pgboss.send).toHaveBeenCalledWith('ingestion.parse', { bookId: BOOK_ID })
-    expect(updates.at(-1)?.set.ingestionProgress).toBe(100)
+    expect(updates.some((u) => u.set.ingestionProgress === 100)).toBe(true)
     expect(logs.find((l) => l.level === 'info')?.meta.cache_hit).toBe(true)
   })
 })

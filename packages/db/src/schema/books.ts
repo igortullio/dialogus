@@ -1,5 +1,8 @@
+import type { IngestionStageProgress } from '@dialogus/shared/schemas/ingestion'
 import { sql } from 'drizzle-orm'
 import { check, index, integer, jsonb, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+
+export type { IngestionStageProgress }
 
 export const INGESTION_STATUS_VALUES = [
   'discovered',
@@ -41,6 +44,12 @@ export const books = pgTable(
     ingestionError: text('ingestion_error'),
     ingestionProgress: integer('ingestion_progress').notNull().default(0),
     ingestionLastStage: text('ingestion_last_stage'),
+    // Per-stage observability record (feature 002). One element per known stage,
+    // written by the worker as it runs; read by the API to build the status DTO.
+    ingestionStages: jsonb('ingestion_stages')
+      .$type<IngestionStageProgress[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     ingestionStartedAt: timestamp('ingestion_started_at', { withTimezone: true }),
     indexedAt: timestamp('indexed_at', { withTimezone: true }),
     tags: jsonb('tags').$type<string[]>().notNull().default(sql`'[]'::jsonb`),

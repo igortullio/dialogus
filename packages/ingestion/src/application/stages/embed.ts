@@ -3,13 +3,17 @@ import type { ChunkEmbeddingUpdate } from '../../domain/chunk/ChunkRepository.po
 import { EmbedError } from '../../domain/ingestion/IngestionError'
 import {
   type BookRecordForStage,
+  beginStage,
+  completeStage,
+  failStage,
   findBookForStage,
   INGESTION_ERROR_SLUGS,
   INGESTION_QUEUES,
+  queueStage,
+  reportStageUnits,
   type StageDeps,
   type StageLogger,
   type StagePayload,
-  updateBookState,
 } from './_common'
 
 const BATCH_SIZE = 100
@@ -23,12 +27,7 @@ export async function embedStage(payload: StagePayload, deps: EmbedStageDeps): P
   const startedAt = Date.now()
   const book = await findBookForStage(deps.db, payload.bookId)
 
-  await updateBookState(deps.db, book.id, {
-    ingestionStatus: 'embedding',
-    ingestionProgress: 0,
-    ingestionLastStage: 'embed',
-    ingestionError: null,
-  })
+  await beginStage(deps.db, book.id, 'embed', { unit: 'chunks' })
 
   let totalEmbedded = 0
   let totalBatches = 0
@@ -36,6 +35,11 @@ export async function embedStage(payload: StagePayload, deps: EmbedStageDeps): P
   try {
     const totalPending = await deps.chunkRepo.countByBookIdWithoutEmbedding(book.id)
     const expectedBatches = Math.max(1, Math.ceil(totalPending / BATCH_SIZE))
+    await reportStageUnits(deps.db, book.id, 'embed', 0, {
+      unitsTotal: totalPending,
+      unit: 'chunks',
+      progress: 0,
+    })
 
     let buffer: Chunk[] = []
     for await (const chunk of deps.chunkRepo.listByBookIdWithoutEmbedding(book.id)) {
@@ -44,7 +48,11 @@ export async function embedStage(payload: StagePayload, deps: EmbedStageDeps): P
         await processBatch(buffer, deps, book)
         totalEmbedded += buffer.length
         totalBatches += 1
-        await updateProgress(deps, book.id, totalBatches, expectedBatches)
+        await reportStageUnits(deps.db, book.id, 'embed', totalEmbedded, {
+          unitsTotal: totalPending,
+          unit: 'chunks',
+          progress: batchProgress(totalBatches, expectedBatches),
+        })
         logBatch(deps.logger, book, buffer.length, totalEmbedded)
         buffer = []
       }
@@ -55,16 +63,13 @@ export async function embedStage(payload: StagePayload, deps: EmbedStageDeps): P
       totalBatches += 1
       logBatch(deps.logger, book, buffer.length, totalEmbedded)
     }
-    await updateBookState(deps.db, book.id, { ingestionProgress: 100 })
+    await completeStage(deps.db, book.id, 'embed')
   } catch (error) {
     const wrapped =
       error instanceof EmbedError
         ? error
         : new EmbedError(`Embed stage failed for book ${book.id}`, { cause: error })
-    await updateBookState(deps.db, book.id, {
-      ingestionStatus: 'failed',
-      ingestionError: `${INGESTION_ERROR_SLUGS.embed}: ${wrapped.message}`,
-    })
+    await failStage(deps.db, book.id, 'embed', `${INGESTION_ERROR_SLUGS.embed}: ${wrapped.message}`)
     deps.logger.error(
       {
         event: 'stage_failed',
@@ -81,6 +86,7 @@ export async function embedStage(payload: StagePayload, deps: EmbedStageDeps): P
     throw wrapped
   }
 
+  await queueStage(deps.db, book.id, 'index')
   await deps.pgboss.send(INGESTION_QUEUES.index, { bookId: book.id })
 
   deps.logger.info(
@@ -121,16 +127,10 @@ async function processBatch(
   await deps.chunkRepo.updateEmbeddingsBatch(updates)
 }
 
-async function updateProgress(
-  deps: EmbedStageDeps,
-  bookId: string,
-  batchesDone: number,
-  expectedBatches: number,
-): Promise<void> {
-  if (expectedBatches <= 0) return
+function batchProgress(batchesDone: number, expectedBatches: number): number {
+  if (expectedBatches <= 0) return 0
   const ratio = batchesDone / expectedBatches
-  const progress = Math.min(99, Math.max(0, Math.floor(ratio * 100)))
-  await updateBookState(deps.db, bookId, { ingestionProgress: progress })
+  return Math.min(99, Math.max(0, Math.floor(ratio * 100)))
 }
 
 function logBatch(

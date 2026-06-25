@@ -218,6 +218,7 @@ export function composeStageDeps(input: ComposeStageDepsInput): ComposedStageDep
     downloader,
     pgboss: input.boss,
     storageRoot,
+    downloadHeartbeatMs: input.config.INGESTION_DOWNLOAD_HEARTBEAT_MS,
   }
   return {
     deps,

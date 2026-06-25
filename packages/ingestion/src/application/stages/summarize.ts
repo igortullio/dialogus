@@ -7,12 +7,16 @@ import { SummarizeError } from '../../domain/ingestion/IngestionError'
 import type { ParsedChapter, SupportedLanguage } from '../../domain/parser/ChapterParser.port'
 import {
   type BookRecordForStage,
+  beginStage,
+  completeStage,
+  failStage,
   findBookForStage,
   INGESTION_ERROR_SLUGS,
   INGESTION_QUEUES,
+  queueStage,
+  reportStageUnits,
   type StageDeps,
   type StagePayload,
-  updateBookState,
 } from './_common'
 
 export type SummarizeStageDeps = Pick<StageDeps, 'db' | 'logger' | 'pgboss' | 'chapterRepo'> & {
@@ -27,20 +31,20 @@ export async function summarizeStage(
   const startedAt = Date.now()
   const book = await findBookForStage(deps.db, payload.bookId)
 
-  await updateBookState(deps.db, book.id, {
-    ingestionStatus: 'summarizing',
-    ingestionProgress: 0,
-    ingestionLastStage: 'summarize',
-    ingestionError: null,
-  })
-
   const language = resolveLanguage(book)
   const totalChapters = await deps.chapterRepo.countByBookId(book.id)
+  await beginStage(deps.db, book.id, 'summarize', { unit: 'chapters', unitsTotal: totalChapters })
   let generated = 0
 
   try {
     const missingChapterIds = await deps.chapterSummaryRepo.listMissingChapterIds(book.id)
     const existingCount = totalChapters - missingChapterIds.length
+    if (existingCount > 0) {
+      await reportStageUnits(deps.db, book.id, 'summarize', existingCount, {
+        unitsTotal: totalChapters,
+        unit: 'chapters',
+      })
+    }
 
     for (const [index, chapterId] of missingChapterIds.entries()) {
       const chapter = await deps.chapterRepo.findById(chapterId)
@@ -62,7 +66,11 @@ export async function summarizeStage(
 
       const completed = existingCount + index + 1
       const progress = totalChapters > 0 ? Math.floor((completed / totalChapters) * 100) : 100
-      await updateBookState(deps.db, book.id, { ingestionProgress: progress })
+      await reportStageUnits(deps.db, book.id, 'summarize', completed, {
+        unitsTotal: totalChapters,
+        unit: 'chapters',
+        progress,
+      })
 
       deps.logger.info(
         {
@@ -77,20 +85,17 @@ export async function summarizeStage(
         'chapter summary persisted',
       )
     }
-
-    if (totalChapters === 0 || missingChapterIds.length === 0) {
-      await updateBookState(deps.db, book.id, { ingestionProgress: 100 })
-    }
   } catch (error) {
     const wrapped =
       error instanceof SummarizeError
         ? error
         : new SummarizeError(`Summarize stage failed for book ${book.id}`, { cause: error })
-    await updateBookState(deps.db, book.id, {
-      ingestionStatus: 'failed',
-      ingestionError: `${INGESTION_ERROR_SLUGS.summarize}: ${wrapped.message}`,
-      ingestionLastStage: 'summarize',
-    })
+    await failStage(
+      deps.db,
+      book.id,
+      'summarize',
+      `${INGESTION_ERROR_SLUGS.summarize}: ${wrapped.message}`,
+    )
     deps.logger.error(
       {
         event: 'stage_failed',
@@ -107,6 +112,8 @@ export async function summarizeStage(
     return
   }
 
+  await completeStage(deps.db, book.id, 'summarize')
+  await queueStage(deps.db, book.id, 'embed')
   await deps.pgboss.send(INGESTION_QUEUES.embed, { bookId: book.id })
 
   deps.logger.info(

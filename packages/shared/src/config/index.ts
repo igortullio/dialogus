@@ -48,6 +48,14 @@ export const envSchema = z.object({
   // Max simultaneous in-flight ingestions a single user may have (FR-021).
   INGESTION_USER_CONCURRENCY_LIMIT: z.coerce.number().int().positive().default(2),
 
+  // --- Ingestion progress observability (feature 002-ingestion-progress-tracking) ---
+  // A non-terminal book whose row has not been touched for longer than this is
+  // surfaced as "stalled" (suspected wedge), rather than an indefinitely frozen bar.
+  INGESTION_STALL_THRESHOLD_MS: z.coerce.number().int().positive().default(60_000),
+  // Minimum interval between download-stage progress/heartbeat writes, so a slow
+  // download ticks (bytes/heartbeat) without hammering the row.
+  INGESTION_DOWNLOAD_HEARTBEAT_MS: z.coerce.number().int().positive().default(1_000),
+
   // --- Email (invitations + password reset) ---
   // 'mock' logs the link (deterministic for dev/CI); 'resend' really sends.
   // Absent → 'resend' in production, else 'mock' (resolved in selectEmailProvider).

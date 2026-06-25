@@ -1,0 +1,1 @@
+ALTER TABLE "books" ADD COLUMN "ingestion_stages" jsonb DEFAULT '[]'::jsonb NOT NULL;

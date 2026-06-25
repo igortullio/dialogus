@@ -165,6 +165,14 @@ describe('library client', () => {
         indexed_at: null,
         last_stage: 'chunk',
         error: null,
+        overall_progress: 81,
+        stage_index: 5,
+        total_stages: 7,
+        stages: [],
+        elapsed_ms: 12000,
+        eta_ms: null,
+        queued: false,
+        stalled: false,
       }
       fetchMock.mockResolvedValueOnce(jsonResponse({ data: dto }))
       await expect(fetchIngestionStatus(BOOK_1.id)).resolves.toEqual(dto)

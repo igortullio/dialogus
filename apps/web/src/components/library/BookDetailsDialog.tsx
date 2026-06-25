@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { Book } from '@/lib/api/_schemas'
+import { _internals as statusInternals } from './StatusBadge'
 
 const TITLE_LABEL = 'Detalhes do livro'
 const CLOSE_LABEL = 'Fechar'
@@ -67,7 +68,9 @@ export function BookDetailsDialog({ book, open, onOpenChange }: BookDetailsDialo
             <dt className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
               {STATUS_LABEL}
             </dt>
-            <dd>{book.ingestion_status}</dd>
+            <dd data-slot="book-details-status">
+              {statusInternals.STATUS_LABEL[book.ingestion_status]}
+            </dd>
           </div>
           <div>
             <dt className="font-medium text-muted-foreground text-xs uppercase tracking-wide">

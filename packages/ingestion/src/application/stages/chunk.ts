@@ -5,12 +5,17 @@ import type { Chunk } from '../../domain/chunk/Chunk'
 import { ChunkError } from '../../domain/ingestion/IngestionError'
 import {
   type BookRecordForStage,
+  beginStage,
+  completeStage,
+  failStage,
   findBookForStage,
   INGESTION_ERROR_SLUGS,
   INGESTION_QUEUES,
+  queueStage,
   type StageDeps,
   type StageLogger,
   type StagePayload,
+  skipStageCached,
   updateBookState,
 } from './_common'
 
@@ -57,12 +62,7 @@ export async function chunkStage(payload: StagePayload, deps: ChunkStageDeps): P
   const tokenCounter = deps.tokenCounter ?? defaultTokenCounter
   const book = await findBookForStage(deps.db, payload.bookId)
 
-  await updateBookState(deps.db, book.id, {
-    ingestionStatus: 'chunking',
-    ingestionProgress: 0,
-    ingestionLastStage: 'chunk',
-    ingestionError: null,
-  })
+  await beginStage(deps.db, book.id, 'chunk')
 
   let totalChunks = 0
   let totalChapters = 0
@@ -74,21 +74,18 @@ export async function chunkStage(payload: StagePayload, deps: ChunkStageDeps): P
       cacheHit = true
       totalChunks = existingChunks
       totalChapters = await deps.chapterRepo.countByBookId(book.id)
-      await updateBookState(deps.db, book.id, { ingestionProgress: 100 })
+      await skipStageCached(deps.db, book.id, 'chunk')
     } else {
       totalChapters = await deps.chapterRepo.countByBookId(book.id)
       totalChunks = await streamAndPersistChunks(book, totalChapters, tokenCounter, deps)
-      await updateBookState(deps.db, book.id, { ingestionProgress: 100 })
+      await completeStage(deps.db, book.id, 'chunk')
     }
   } catch (error) {
     const wrapped =
       error instanceof ChunkError
         ? error
         : new ChunkError(`Chunk stage failed for book ${book.id}`, { cause: error })
-    await updateBookState(deps.db, book.id, {
-      ingestionStatus: 'failed',
-      ingestionError: `${INGESTION_ERROR_SLUGS.chunk}: ${wrapped.message}`,
-    })
+    await failStage(deps.db, book.id, 'chunk', `${INGESTION_ERROR_SLUGS.chunk}: ${wrapped.message}`)
     deps.logger.error(
       {
         event: 'stage_failed',
@@ -105,6 +102,7 @@ export async function chunkStage(payload: StagePayload, deps: ChunkStageDeps): P
     throw wrapped
   }
 
+  await queueStage(deps.db, book.id, 'summarize')
   await deps.pgboss.send(INGESTION_QUEUES.summarize, { bookId: book.id })
 
   deps.logger.info(

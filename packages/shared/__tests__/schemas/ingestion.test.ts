@@ -67,6 +67,14 @@ describe('ingestionStatusDtoSchema', () => {
     indexed_at: null,
     last_stage: null,
     error: null,
+    overall_progress: 0,
+    stage_index: 0,
+    total_stages: 7,
+    stages: [],
+    elapsed_ms: null,
+    eta_ms: null,
+    queued: false,
+    stalled: false,
   }
 
   it('parses a freshly-added book with status=discovered, stage=null, progress=0', () => {
@@ -128,6 +136,7 @@ describe('ingestionStatusDtoSchema', () => {
         message: 'OpenAI 503 upstream timeout',
         retryable: true,
         slug: 'ingestion-embed-failed',
+        stage: 'embed',
       },
     }
     const result = ingestionStatusDtoSchema.safeParse(dto)

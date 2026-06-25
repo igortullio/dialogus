@@ -3,6 +3,7 @@ export {
   type BookAuthor,
   books,
   INGESTION_STATUS_VALUES,
+  type IngestionStageProgress,
   type IngestionStatus,
 } from './books'
 export { chapterSummaries } from './chapter_summaries'

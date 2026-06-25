@@ -4,16 +4,20 @@ import { dirname } from 'node:path'
 import { CleanError } from '../../domain/ingestion/IngestionError'
 import { clean as cleanGutenbergText } from '../../infrastructure/parsing/GutenbergCleaner'
 import {
+  beginStage,
   cleanFilePath,
+  completeStage,
   DEFAULT_STORAGE_ROOT,
+  failStage,
   findBookForStage,
   INGESTION_ERROR_SLUGS,
   INGESTION_QUEUES,
   preferredFormat,
+  queueStage,
   rawFilePath,
   type StageDeps,
   type StagePayload,
-  updateBookState,
+  skipStageCached,
 } from './_common'
 
 export type CleanStageDeps = Pick<StageDeps, 'db' | 'logger' | 'pgboss' | 'storageRoot'>
@@ -23,12 +27,7 @@ export async function cleanStage(payload: StagePayload, deps: CleanStageDeps): P
   const storageRoot = deps.storageRoot ?? DEFAULT_STORAGE_ROOT
   const book = await findBookForStage(deps.db, payload.bookId)
 
-  await updateBookState(deps.db, book.id, {
-    ingestionStatus: 'cleaning',
-    ingestionProgress: 0,
-    ingestionLastStage: 'clean',
-    ingestionError: null,
-  })
+  await beginStage(deps.db, book.id, 'clean')
 
   const format = preferredFormat(book)
   const rawPath = rawFilePath(storageRoot, book.gutendexId, format)
@@ -37,22 +36,21 @@ export async function cleanStage(payload: StagePayload, deps: CleanStageDeps): P
 
   try {
     cacheHit = await fileExists(cleanPath)
-    if (!cacheHit) {
+    if (cacheHit) {
+      await skipStageCached(deps.db, book.id, 'clean')
+    } else {
       await mkdir(dirname(cleanPath), { recursive: true })
       const rawText = await readFileAsUtf8(rawPath)
       const cleanedText = cleanGutenbergText(rawText)
       await writeFileStreaming(cleanPath, cleanedText)
+      await completeStage(deps.db, book.id, 'clean')
     }
-    await updateBookState(deps.db, book.id, { ingestionProgress: 100 })
   } catch (error) {
     const wrapped =
       error instanceof CleanError
         ? error
         : new CleanError(`Clean stage failed for book ${book.id}`, { cause: error })
-    await updateBookState(deps.db, book.id, {
-      ingestionStatus: 'failed',
-      ingestionError: `${INGESTION_ERROR_SLUGS.clean}: ${wrapped.message}`,
-    })
+    await failStage(deps.db, book.id, 'clean', `${INGESTION_ERROR_SLUGS.clean}: ${wrapped.message}`)
     deps.logger.error(
       {
         event: 'stage_failed',
@@ -69,6 +67,7 @@ export async function cleanStage(payload: StagePayload, deps: CleanStageDeps): P
     throw wrapped
   }
 
+  await queueStage(deps.db, book.id, 'parse')
   await deps.pgboss.send(INGESTION_QUEUES.parse, { bookId: book.id })
 
   deps.logger.info(

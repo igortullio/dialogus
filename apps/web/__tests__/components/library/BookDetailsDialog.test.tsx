@@ -40,7 +40,8 @@ describe('BookDetailsDialog', () => {
     expect(screen.getByText('The Count of Monte Cristo')).toBeDefined()
     expect(screen.getByText('Alexandre Dumas')).toBeDefined()
     expect(screen.getByText('EN')).toBeDefined()
-    expect(screen.getByText('ready')).toBeDefined()
+    // feature 002: the raw English status is now localized (gap #9).
+    expect(screen.getByText('Pronto')).toBeDefined()
     expect(screen.getByText(/Adventure · Classics/)).toBeDefined()
   })
 

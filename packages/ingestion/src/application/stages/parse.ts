@@ -4,15 +4,20 @@ import { ParseError } from '../../domain/ingestion/IngestionError'
 import type { ParsedChapter, SupportedLanguage } from '../../domain/parser/ChapterParser.port'
 import {
   type BookRecordForStage,
+  beginStage,
   cleanFilePath,
+  completeStage,
   DEFAULT_STORAGE_ROOT,
+  failStage,
   findBookForStage,
   INGESTION_ERROR_SLUGS,
   INGESTION_QUEUES,
   preferredFormat,
+  queueStage,
   rawFilePath,
   type StageDeps,
   type StagePayload,
+  skipStageCached,
   updateBookState,
 } from './_common'
 
@@ -28,12 +33,7 @@ export async function parseStage(payload: StagePayload, deps: ParseStageDeps): P
   const storageRoot = deps.storageRoot ?? DEFAULT_STORAGE_ROOT
   const book = await findBookForStage(deps.db, payload.bookId)
 
-  await updateBookState(deps.db, book.id, {
-    ingestionStatus: 'parsing',
-    ingestionProgress: 0,
-    ingestionLastStage: 'parse',
-    ingestionError: null,
-  })
+  await beginStage(deps.db, book.id, 'parse')
 
   let totalChapters = 0
   let cacheHit = false
@@ -43,7 +43,7 @@ export async function parseStage(payload: StagePayload, deps: ParseStageDeps): P
     if (existingCount > 0) {
       cacheHit = true
       totalChapters = existingCount
-      await updateBookState(deps.db, book.id, { ingestionProgress: 100 })
+      await skipStageCached(deps.db, book.id, 'parse')
     } else {
       totalChapters = await streamAndPersistChapters(book, storageRoot, deps)
       if (totalChapters === 0) {
@@ -51,17 +51,14 @@ export async function parseStage(payload: StagePayload, deps: ParseStageDeps): P
           `No chapters extracted for book ${book.id} (gutendex ${book.gutendexId})`,
         )
       }
-      await updateBookState(deps.db, book.id, { ingestionProgress: 100 })
+      await completeStage(deps.db, book.id, 'parse')
     }
   } catch (error) {
     const wrapped =
       error instanceof ParseError
         ? error
         : new ParseError(`Parse stage failed for book ${book.id}`, { cause: error })
-    await updateBookState(deps.db, book.id, {
-      ingestionStatus: 'failed',
-      ingestionError: `${INGESTION_ERROR_SLUGS.parse}: ${wrapped.message}`,
-    })
+    await failStage(deps.db, book.id, 'parse', `${INGESTION_ERROR_SLUGS.parse}: ${wrapped.message}`)
     deps.logger.error(
       {
         event: 'stage_failed',
@@ -78,6 +75,7 @@ export async function parseStage(payload: StagePayload, deps: ParseStageDeps): P
     throw wrapped
   }
 
+  await queueStage(deps.db, book.id, 'chunk')
   await deps.pgboss.send(INGESTION_QUEUES.chunk, { bookId: book.id })
 
   deps.logger.info(

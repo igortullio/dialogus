@@ -1,6 +1,10 @@
 'use client'
 
-import type { IngestionStatus, IngestionStatusDto } from '@dialogus/shared/schemas/ingestion'
+import type {
+  IngestionStage,
+  IngestionStatus,
+  IngestionStatusDto,
+} from '@dialogus/shared/schemas/ingestion'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Image from 'next/image'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -9,11 +13,18 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import type { Book } from '@/lib/api/_schemas'
 import { fetchIngestionStatus, startIngestion } from '@/lib/api/library'
+import {
+  friendlyErrorMessage,
+  isRetryableSlug,
+  parseErrorSlug,
+  slugToStage,
+} from '@/lib/ingestion/messages'
 import { cn } from '@/lib/utils'
 import { BookDetailsDialog } from './BookDetailsDialog'
 import { CoverFallback } from './CoverFallback'
 import { RemoveBookDialog } from './RemoveBookDialog'
 import { RetryButton } from './RetryButton'
+import { StageStepper } from './StageStepper'
 import { isInProgress, StatusBadge } from './StatusBadge'
 
 const POLL_INTERVAL_MS = 2000
@@ -41,6 +52,31 @@ function makeIdempotencyKey(prefix: string, id: string): string {
     return `${prefix}-${id}-${crypto.randomUUID()}`
   }
   return `${prefix}-${id}-${Date.now()}`
+}
+
+interface DisplayError {
+  readonly message: string | null
+  readonly stage: IngestionStage | null
+  readonly retryable: boolean
+}
+
+/**
+ * Resolve a failed book's display error. Prefers the live poll's typed error,
+ * falling back to parsing the raw `ingestion_error` field — the raw
+ * `<slug>: <message>` is never surfaced, only the localized friendly message.
+ */
+function deriveDisplayError(
+  rawError: string | null,
+  data: IngestionStatusDto | undefined,
+): DisplayError {
+  const errorData = data?.error ?? null
+  const slug = errorData?.slug ?? parseErrorSlug(rawError)
+  const stage = errorData?.stage ?? slugToStage(slug)
+  const retryable = errorData?.retryable ?? isRetryableSlug(slug)
+  const message = slug
+    ? friendlyErrorMessage(slug, { stage, stageIndex: data?.stage_index ?? null, retryable })
+    : null
+  return { message, stage, retryable }
 }
 
 interface CoverProps {
@@ -133,7 +169,9 @@ export function BookCard({ book, className, priority }: BookCardProps) {
     : (liveStatusQuery.data?.status ?? book.ingestion_status)
   const liveProgress = liveStatusQuery.data?.progress ?? 0
   const inProgress = isInProgress(liveStatus)
-  const lastError = liveStatusQuery.data?.error?.message ?? book.ingestion_error ?? null
+
+  const displayError = deriveDisplayError(book.ingestion_error, liveStatusQuery.data)
+  const friendlyError = displayError.message
 
   // Surface terminal transitions (in-progress → ready/failed) as toasts so
   // the user notices even when not staring at this card.
@@ -147,11 +185,11 @@ export function BookCard({ book, className, priority }: BookCardProps) {
       toast.success(`"${book.title}" está pronto para conversa.`)
     } else if (liveStatus === 'failed') {
       toast.error(
-        `Falhou ao ingerir "${book.title}". ${lastError ?? 'Veja a biblioteca para tentar novamente.'}`,
+        `Falhou ao ingerir "${book.title}". ${friendlyError ?? 'Veja a biblioteca para tentar novamente.'}`,
         { duration: 8000 },
       )
     }
-  }, [liveStatus, book.title, lastError])
+  }, [liveStatus, book.title, friendlyError])
 
   const invalidateLibrary = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY })
@@ -192,7 +230,12 @@ export function BookCard({ book, className, priority }: BookCardProps) {
 
         <div data-slot="book-card-status-row" className="flex flex-col gap-2">
           <StatusBadge status={liveStatus} progress={inProgress ? liveProgress : undefined} />
-          {inProgress && <ProgressBar value={liveProgress} />}
+          {inProgress &&
+            (liveStatusQuery.data ? (
+              <StageStepper status={liveStatusQuery.data} />
+            ) : (
+              <ProgressBar value={liveProgress} />
+            ))}
         </div>
 
         <div data-slot="book-card-actions" className="mt-auto flex flex-col gap-2">
@@ -225,16 +268,30 @@ export function BookCard({ book, className, priority }: BookCardProps) {
           )}
           {liveStatus === 'failed' && (
             <div className="flex flex-col gap-1">
-              {lastError && (
+              {friendlyError && (
                 <p
                   role="alert"
                   data-slot="book-card-error"
                   className="text-destructive text-xs leading-snug"
                 >
-                  {lastError}
+                  {friendlyError}
                 </p>
               )}
-              <RetryButton bookId={book.id} lastError={lastError} />
+              {/* FR-009: retry is offered ONLY for recoverable failures. */}
+              {displayError.retryable ? (
+                <RetryButton
+                  bookId={book.id}
+                  lastError={friendlyError}
+                  resumeStage={displayError.stage}
+                />
+              ) : (
+                <p
+                  data-slot="book-card-error-nonretryable"
+                  className="text-muted-foreground text-xs"
+                >
+                  Esta falha não é recuperável automaticamente.
+                </p>
+              )}
             </div>
           )}
         </div>

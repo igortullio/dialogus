@@ -155,7 +155,9 @@ describe('downloadStage — happy path', () => {
       { db: mock.db, logger, downloader, pgboss, storageRoot: workdir },
     )
 
-    expect(mock.findFirstCalls).toBe(1)
+    // The book is loaded once; the stage-record helpers re-read `ingestion_stages`
+    // per transition, so allow ≥ 1 read.
+    expect(mock.findFirstCalls).toBeGreaterThanOrEqual(1)
     expect(downloader.download).toHaveBeenCalledTimes(1)
     // TXT is preferred over EPUB for predictable chaptering (Gutenberg framing).
     expect(downloader.download).toHaveBeenCalledWith(GUTENDEX_ID, 'txt')
@@ -167,9 +169,9 @@ describe('downloadStage — happy path', () => {
     expect(downloadingUpdate?.ingestionError).toBeNull()
     expect(downloadingUpdate?.ingestionStartedAt).toBeDefined()
 
-    const rawHashUpdate = mock.updates[1]?.set
+    const rawHashUpdate = mock.updates.find((u) => u.set.rawHash !== undefined)?.set
     expect(rawHashUpdate?.rawHash).toBe('sha-from-real-download')
-    expect(rawHashUpdate?.ingestionProgress).toBe(100)
+    expect(mock.updates.some((u) => u.set.ingestionProgress === 100)).toBe(true)
 
     expect(pgboss.send).toHaveBeenCalledWith('ingestion.clean', { bookId: BOOK_ID })
 

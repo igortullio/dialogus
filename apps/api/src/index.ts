@@ -195,6 +195,7 @@ export async function main(): Promise<void> {
       auth,
       libraryRepo,
       concurrencyLimit: config.INGESTION_USER_CONCURRENCY_LIMIT,
+      stallThresholdMs: config.INGESTION_STALL_THRESHOLD_MS,
       logger,
       enqueueDeps: { databaseUrl: config.DATABASE_URL },
       addBookToLibrary: (userId, gutendexId) =>

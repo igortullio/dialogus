@@ -201,7 +201,7 @@ describe('chunkStage — happy path: chapter under target', () => {
     expect(only?.text).toBe(plainText)
     expect(pgboss.send).toHaveBeenCalledWith('ingestion.summarize', { bookId: BOOK_ID })
     expect(updates[0]?.set.ingestionStatus).toBe('chunking')
-    expect(updates.at(-1)?.set.ingestionProgress).toBe(100)
+    expect(updates.some((u) => u.set.ingestionProgress === 100)).toBe(true)
   })
 })
 

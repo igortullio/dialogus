@@ -322,7 +322,7 @@ describe('GET /api/library/books/:id/ingestion', () => {
     const body = (await res.json()) as { data: Record<string, unknown> }
 
     expect(res.status).toBe(200)
-    expect(body.data).toEqual({
+    expect(body.data).toMatchObject({
       book_id: BOOK_ID,
       status: 'embedding',
       stage: 'embed',
@@ -331,7 +331,17 @@ describe('GET /api/library/books/:id/ingestion', () => {
       indexed_at: null,
       last_stage: 'embed',
       error: null,
+      // feature 002: enriched whole-pipeline framing
+      overall_progress: 77, // round((5 + 0.42) / 7 * 100)
+      stage_index: 5,
+      total_stages: 7,
+      queued: false,
+      stalled: false,
+      eta_ms: null,
     })
+    const stages = body.data.stages as unknown[]
+    expect(stages).toHaveLength(7)
+    expect(typeof body.data.elapsed_ms).toBe('number')
   })
 
   it('reports the failed-stage and parsed error fields for a failed book', async () => {

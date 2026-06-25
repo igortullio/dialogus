@@ -6,6 +6,12 @@ import { toast } from 'sonner'
 import type { Book } from '@/lib/api/_schemas'
 import { type FetchLibraryResult, fetchLibrary } from '@/lib/api/library'
 import { authClient } from '@/lib/auth-client'
+import {
+  friendlyErrorMessage,
+  isRetryableSlug,
+  parseErrorSlug,
+  slugToStage,
+} from '@/lib/ingestion/messages'
 import { LIBRARY_QUERY_KEY } from '@/lib/query-keys'
 import { isInProgress } from './StatusBadge'
 
@@ -28,10 +34,14 @@ function notifyTerminalTransition(book: Book, prev: string | undefined): void {
     return
   }
   if (curr === 'failed') {
-    toast.error(
-      `Falhou ao ingerir "${book.title}". ${book.ingestion_error ?? 'Veja a biblioteca.'}`,
-      { duration: 8000 },
-    )
+    const slug = parseErrorSlug(book.ingestion_error)
+    const friendly = slug
+      ? friendlyErrorMessage(slug, {
+          stage: slugToStage(slug),
+          retryable: isRetryableSlug(slug),
+        })
+      : 'Veja a biblioteca.'
+    toast.error(`Falhou ao ingerir "${book.title}". ${friendly}`, { duration: 8000 })
   }
 }
 

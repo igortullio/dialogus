@@ -24,6 +24,10 @@ import {
   getIngestionStatus,
 } from '../../../application/library/getIngestionStatus'
 import { type IngestBookDeps, ingestBook } from '../../../application/library/ingest'
+import {
+  computeOverallProgress,
+  statusToActiveStage,
+} from '../../../application/library/ingestionStatus'
 import { type RetryIngestBookDeps, retryIngestBook } from '../../../application/library/retryIngest'
 import type { Auth } from '../../auth/auth'
 import type { EnqueueDeps, enqueue } from '../../pgboss/enqueue'
@@ -35,6 +39,7 @@ export interface LibraryRouteDeps {
   readonly auth: Auth
   readonly libraryRepo: LibraryEntryRepository
   readonly concurrencyLimit: number
+  readonly stallThresholdMs?: number
   readonly logger?: Logger
   readonly enqueueDeps: EnqueueDeps
   readonly enqueueImpl?: typeof enqueue
@@ -71,6 +76,14 @@ function toBookDto(book: Book) {
     cover_url: book.coverUrl,
     ingestion_status: book.ingestionStatus,
     ingestion_error: book.ingestionError,
+    // Coarse whole-pipeline progress for the list card's overall bar (the book
+    // card polls /ingestion for the precise, per-stage stepper). Derived from
+    // status alone — the list does not carry intra-stage progress.
+    ingestion_overall_progress: computeOverallProgress(
+      book.ingestionStatus,
+      statusToActiveStage(book.ingestionStatus),
+      0,
+    ),
     tags: [...book.tags],
     created_at: book.createdAt.toISOString(),
     updated_at: book.updatedAt.toISOString(),
@@ -94,7 +107,11 @@ export function createLibraryRoute(deps: LibraryRouteDeps): Hono {
     ...(deps.enqueueImpl ? { enqueueImpl: deps.enqueueImpl } : {}),
   }
   const retryDeps: RetryIngestBookDeps = ingestDeps
-  const statusDeps: GetIngestionStatusDeps = { db: deps.db, libraryRepo: deps.libraryRepo }
+  const statusDeps: GetIngestionStatusDeps = {
+    db: deps.db,
+    libraryRepo: deps.libraryRepo,
+    ...(deps.stallThresholdMs !== undefined ? { stallThresholdMs: deps.stallThresholdMs } : {}),
+  }
   const chunkDeps: GetChunkDeps = { db: deps.db, libraryRepo: deps.libraryRepo }
 
   const idempotencyMiddleware = idempotency({
